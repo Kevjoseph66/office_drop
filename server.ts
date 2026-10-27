@@ -15,7 +15,7 @@ const port = process.env.PORT || 3000;
 app.use(express.json());
 
 // Initialize GoogleGenAI server-side with telemetry header
-const apiKey = process.env.GEMINI_API_KEY;
+const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
 let aiClient: GoogleGenAI | null = null;
 if (apiKey) {
   aiClient = new GoogleGenAI({
@@ -128,7 +128,19 @@ app.post('/api/generate-potluck-items', async (req: Request, res: Response) => {
     const safeDesc = (themeDescription || 'Comida rica, variada y equilibrada en costos').trim();
     const safeBudget = (customBudget || 'Gasto similar y moderado para cada compañero (~$5 a $10 por persona)').trim();
 
-    // Check if Gemini API client is available
+    // Check if Gemini API client is available or can be initialized
+    const currentKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
+    if (!aiClient && currentKey) {
+      aiClient = new GoogleGenAI({
+        apiKey: currentKey,
+        httpOptions: {
+          headers: {
+            'User-Agent': 'aistudio-build',
+          },
+        },
+      });
+    }
+
     if (aiClient) {
       try {
         const prompt = `Actúa como organizador experto de eventos corporativos de oficina.
@@ -145,7 +157,7 @@ REGLAS CRÍTICAS:
 6. "costoEstimado" debe ser un rango realista en formato texto (ej: "$5 - $8", "$6 - $9").`;
 
         const response = await aiClient.models.generateContent({
-          model: 'gemini-3.8-flash',
+          model: 'gemini-2.5-flash',
           contents: prompt,
           config: {
             systemInstruction:
@@ -182,7 +194,7 @@ REGLAS CRÍTICAS:
             }));
             return res.json({
               success: true,
-              source: 'gemini-3.8-flash',
+              source: 'gemini-2.5-flash',
               items: sanitized,
             });
           }
