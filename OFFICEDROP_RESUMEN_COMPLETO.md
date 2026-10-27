@@ -358,4 +358,30 @@ El proyecto está diseñado bajo una arquitectura de **despliegue dual**:
 
 ---
 
+## 11. Mejoras Recientes: Compatibilidad Safari y Confirmación de Compras
+
+### A. Corrección del Bug en Navegador Safari (iOS / macOS):
+- **Causa raíz:** En Safari (especialmente navegadores WebKit en iPhone), el API de Web Audio bloquea `AudioContext` en estado `suspended` y lanza excepciones `DOMException` con `exponentialRampToValueAtTime` si los valores son microscópicos o el contexto no está activo. Además, transacciones de Firestore pueden demorarse o colgar en WebSockets lentos, y si no había bloque `finally`, `isOpeningBox` quedaba `true` para siempre (animación de cofre temblando "ABRIENDO...").
+- **Solución implementada:**
+  1. **Rampas lineales seguras:** Reemplazo de `exponentialRampToValueAtTime` por `linearRampToValueAtTime` en `soundEffects.ts`.
+  2. **Manejo defensivo de Audio y Confetti:** Todos los efectos de sonido y partículas están envueltos en `try { ... } catch {}` aislados para que un bloqueo de audio en Safari jamás interrumpa el flujo del juego.
+  3. **Temporizador de seguridad de 3.8s (`Promise.race`):** Si la transacción de Firestore en Safari tarda más de 3 segundos, se activa inmediatamente el respaldo local con `assignRandomPotluckItem`.
+  4. **Actualización optimista inmediata (`onUpdateEvent`):** El estado local se actualiza en 0ms, sin esperar la llegada del snapshot por red de Firestore.
+  5. **Garantía en `finally`:** `setIsOpeningBox(false)` se ejecuta siempre en el bloque `finally` y mediante un temporizador guardián.
+
+### B. Sistema de Confirmación de Compra / Aporte (`purchased: boolean`):
+- **Objetivo:** Permitir que cada participante confirme de forma interactiva si ya compró o preparó su comida asignada, y que el organizador tenga un control en tiempo real en la pantalla grande.
+- **Persistencia dual:** Se guarda atómicamente en Firestore (`togglePotluckItemPurchasedInFirestore`) y se almacena en caché local del dispositivo (`localStorage.setItem('officedrop_purchased_...')`).
+- **Vista Participante Móvil (`ParticipantMobileView.tsx`):**
+  - Muestra una tarjeta retro con estado: `[ ⏳ PENDIENTE ]` o `[ ✓ COMPRADO ]`.
+  - Botón verde arcade: `[ 🛒 CONFIRMAR QUE YA LO COMPRÉ ]`.
+  - Modal interactivo con resumen del paquete/sub-ítems a comprar, botón de confirmación con fanfarria arcade y lluvia de confetti.
+  - Opción de desmarcar o cambiar a pendiente si hubo un error.
+- **Vista Organizador (`OrganizerView.tsx`):**
+  - Métrica en la barra de progreso: `🛒 {purchased}/{assigned} COMPRADOS ({purchasedPercent}%)`.
+  - Nueva pestaña de filtro: `COMPRADOS ({potluckStats.purchased})`.
+  - Cada tarjeta de ítem en la lista tiene un botón/badge interactivo para alternar entre `[✓ COMPRADO]` y `[⏳ PENDIENTE]`.
+
+---
+
 *Documento generado para auditoría técnica, despliegue en Vercel y análisis de arquitectura de OfficeDrop.*

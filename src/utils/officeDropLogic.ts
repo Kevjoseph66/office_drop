@@ -124,29 +124,57 @@ export function selectRaffleWinner(tickets: RaffleTicket[], seedIndex?: number):
 }
 
 /**
+ * Toggles purchased state of a potluck item
+ */
+export function toggleItemPurchased(
+  items: PotluckItem[],
+  itemId: string,
+  purchased: boolean
+): PotluckItem[] {
+  const now = purchased ? new Date().toISOString() : null;
+  return items.map((item) => {
+    if (item.id === itemId) {
+      return {
+        ...item,
+        purchased,
+        purchasedAt: now,
+      };
+    }
+    return item;
+  });
+}
+
+/**
  * Computes statistics for a potluck dynamic
  */
 export function calculatePotluckStats(items: PotluckItem[]) {
   const total = items.length;
   const assigned = items.filter((i) => Boolean(i.assignedTo)).length;
+  const purchased = items.filter((i) => Boolean(i.purchased)).length;
   const remaining = total - assigned;
   const percent = total > 0 ? Math.round((assigned / total) * 100) : 0;
+  const purchasedPercent = assigned > 0 ? Math.round((purchased / assigned) * 100) : 0;
 
-  const categories: Record<string, { total: number; assigned: number }> = {};
+  const categories: Record<string, { total: number; assigned: number; purchased: number }> = {};
   items.forEach((item) => {
     const cat = item.categoria || 'Varios';
     if (!categories[cat]) {
-      categories[cat] = { total: 0, assigned: 0 };
+      categories[cat] = { total: 0, assigned: 0, purchased: 0 };
     }
     categories[cat].total += 1;
     if (item.assignedTo) {
       categories[cat].assigned += 1;
+    }
+    if (item.purchased) {
+      categories[cat].purchased += 1;
     }
   });
 
   return {
     total,
     assigned,
+    purchased,
+    purchasedPercent,
     remaining,
     percent,
     categories,

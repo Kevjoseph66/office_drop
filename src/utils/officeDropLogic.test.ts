@@ -6,6 +6,7 @@ import {
   registerRaffleTicket,
   selectRaffleWinner,
   calculatePotluckStats,
+  toggleItemPurchased,
 } from './officeDropLogic';
 import { PotluckItem, RaffleTicket } from '../types';
 
@@ -144,4 +145,33 @@ test('hashPin produces deterministic 64-character SHA-256 hex string', async () 
   assert.equal(hash1.length, 64);
   assert.equal(hash1, hash2);
   assert.notEqual(hash1, hashOther);
+});
+
+test('toggleItemPurchased sets purchased to true with timestamp and can toggle back', () => {
+  const items: PotluckItem[] = [
+    { id: '1', nombre: 'Jugo', cantidadEspecifica: '2L', categoria: 'Bebidas', costoEstimado: '$5', assignedTo: 'Carlos' },
+    { id: '2', nombre: 'Pan', cantidadEspecifica: '10 u', categoria: 'Panadería', costoEstimado: '$5' },
+  ];
+
+  const marked = toggleItemPurchased(items, '1', true);
+  assert.equal(marked[0].purchased, true);
+  assert.ok(marked[0].purchasedAt);
+
+  const unmarked = toggleItemPurchased(marked, '1', false);
+  assert.equal(unmarked[0].purchased, false);
+  assert.equal(unmarked[0].purchasedAt, null);
+});
+
+test('calculatePotluckStats calculates purchased count and percentage correctly', () => {
+  const items: PotluckItem[] = [
+    { id: '1', nombre: 'Jugo', cantidadEspecifica: '2L', categoria: 'Bebidas', costoEstimado: '$5', assignedTo: 'Carlos', purchased: true },
+    { id: '2', nombre: 'Pan', cantidadEspecifica: '10 u', categoria: 'Panadería', costoEstimado: '$5', assignedTo: 'Sofia', purchased: false },
+    { id: '3', nombre: 'Tarta', cantidadEspecifica: '1 u', categoria: 'Postre', costoEstimado: '$7' },
+  ];
+
+  const stats = calculatePotluckStats(items);
+  assert.equal(stats.total, 3);
+  assert.equal(stats.assigned, 2);
+  assert.equal(stats.purchased, 1);
+  assert.equal(stats.purchasedPercent, 50); // 1 out of 2 assigned
 });

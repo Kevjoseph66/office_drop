@@ -531,6 +531,47 @@ window.open(url, '_blank');
 
 ---
 
+### 6.4 Compatibilidad Multi-Navegador: El Desafío de Safari y WebKit
+Los navegadores basados en WebKit (Safari en macOS y todo navegador en iOS) imponen restricciones muy estrictas:
+1. **Autoplay Policy de Web Audio:**
+   - Si se invoca `audioCtx.resume()` sin manejar el rechazo de la promesa, Safari aborta la ejecución del script.
+   - Si se usa `exponentialRampToValueAtTime` con valores cercanos a 0 o en contextos suspendidos, Safari lanza un error de tipo `DOMException`.
+   - **Solución implementada:** Se utilizan rampas lineales (`linearRampToValueAtTime`) y se capturan todas las promesas y llamadas de audio en bloques `try/catch`.
+2. **Carrera contra Transacciones Colgadas (`Promise.race`):**
+   - Si la red móvil o IndexedDB en Safari experimenta lentitud o bloqueos en la transacción de Firestore, la pantalla del participante podría quedarse eternamente mostrando la animación de cofre temblando (`isOpeningBox`).
+   - **Solución implementada:** Se utiliza una carrera de promesas:
+   ```typescript
+   const timeoutPromise = new Promise((_, reject) =>
+     setTimeout(() => reject(new Error('TIMEOUT_SAFARI')), 3000)
+   );
+   const result = await Promise.race([transactionPromise, timeoutPromise]);
+   ```
+   - Si el timeout se dispara primero, se activa inmediatamente el respaldo local con `assignRandomPotluckItem` y se llama a `onUpdateEvent`, garantizando en el bloque `finally` que `setIsOpeningBox(false)` se ejecute sin demoras.
+
+---
+
+### 6.5 Arquitectura de Confirmación de Compras (`purchased: boolean`)
+Para saber si los participantes ya adquirieron sus productos:
+1. **Modelo de Datos:**
+   ```typescript
+   export interface PotluckItem {
+     // ...
+     purchased?: boolean;        // ¿Ya fue comprado o preparado?
+     purchasedAt?: string | null; // Fecha y hora ISO de la confirmación
+   }
+   ```
+2. **Servicio Atómico en Firestore (`eventService.ts`):**
+   - Función `togglePotluckItemPurchasedInFirestore(eventId, itemId, purchased)`: Ejecuta una transacción atómica que actualiza únicamente la propiedad `purchased` y `purchasedAt` del ítem específico.
+3. **Persistencia en Caché de Dispositivo (`localStorage`):**
+   - Guarda la clave `officedrop_purchased_{eventId}_{itemId}` para reflejar de inmediato el estado incluso en caso de desconexión.
+4. **Actualización Optimista:**
+   - La interfaz actualiza el estado React inmediatamente con `toggleItemPurchased`, reproduce una fanfarria arcade y lanza confeti si se marca como comprado.
+5. **Visibilidad Dual:**
+   - **Participante:** Tarjeta de estado interactiva con botón para abrir modal de confirmación detallado y opción de desmarcar.
+   - **Organizador:** Conteo en vivo en el encabezado de estadísticas (`{purchased}/{assigned}` comprados), filtro rápido `COMPRADOS` y botón de conmutación directa en cada fila.
+
+---
+
 ## 7. Glosario de Términos para Futuros Ingenieros de Software
 
 | Término | Explicación Sencilla |

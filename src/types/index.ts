@@ -17,6 +17,8 @@ export interface PotluckItem {
   assignedAt?: string | null;
   assignedDeviceId?: string | null;
   subItems?: PotluckSubItem[];
+  purchased?: boolean;
+  purchasedAt?: string | null;
 }
 
 export interface RaffleTicket {

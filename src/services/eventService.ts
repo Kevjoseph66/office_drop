@@ -244,6 +244,38 @@ export async function unassignPotluckItemInFirestore(
 }
 
 /**
+ * Toggles purchased state of a potluck item in Firestore
+ */
+export async function togglePotluckItemPurchasedInFirestore(
+  eventId: string,
+  itemId: string,
+  purchased: boolean
+): Promise<void> {
+  const docRef = doc(db, EVENTS_COLLECTION, eventId);
+
+  await runTransaction(db, async (transaction) => {
+    const docSnap = await transaction.get(docRef);
+    if (!docSnap.exists()) return;
+
+    const eventData = docSnap.data() as OfficeEvent;
+    const items = eventData.items || [];
+    const now = purchased ? new Date().toISOString() : null;
+    const updated = items.map((it) => {
+      if (it.id === itemId) {
+        return {
+          ...it,
+          purchased,
+          purchasedAt: now,
+        };
+      }
+      return it;
+    });
+
+    transaction.update(docRef, { items: cleanForFirestore(updated) });
+  });
+}
+
+/**
  * Updates winner in Firestore
  */
 export async function setRaffleWinnerInFirestore(

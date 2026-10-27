@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { OfficeEvent, PotluckItem } from '../types';
-import { calculatePotluckStats, unassignPotluckItem } from '../utils/officeDropLogic';
+import { calculatePotluckStats, unassignPotluckItem, toggleItemPurchased } from '../utils/officeDropLogic';
+import { togglePotluckItemPurchasedInFirestore } from '../services/eventService';
 import {
   Sparkles,
   QrCode,
@@ -18,6 +19,7 @@ import {
   Clock,
   RotateCw,
   ShoppingBag,
+  ShoppingCart,
   Smartphone,
   AlertCircle,
   Lightbulb,
@@ -58,7 +60,7 @@ export const OrganizerView: React.FC<OrganizerViewProps> = ({
   const [aiError, setAiError] = useState<string | null>(null);
   const [aiSuccessMsg, setAiSuccessMsg] = useState<string | null>(null);
 
-  const [filterMode, setFilterMode] = useState<'all' | 'assigned' | 'available'>('all');
+  const [filterMode, setFilterMode] = useState<'all' | 'assigned' | 'available' | 'purchased'>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
@@ -265,6 +267,16 @@ export const OrganizerView: React.FC<OrganizerViewProps> = ({
     onUpdateEvent({ ...event, items: updated });
   };
 
+  const handleToggleItemPurchased = async (itemId: string, newPurchased: boolean) => {
+    const updated = toggleItemPurchased(event.items, itemId, newPurchased);
+    onUpdateEvent({ ...event, items: updated });
+    try {
+      await togglePotluckItemPurchasedInFirestore(event.id, itemId, newPurchased);
+    } catch (err) {
+      console.warn('Could not persist item purchased status from organizer:', err);
+    }
+  };
+
   const handleSaveItemEdit = (itemId: string) => {
     const updated = event.items.map((it) => {
       if (it.id === itemId) {
@@ -316,6 +328,7 @@ export const OrganizerView: React.FC<OrganizerViewProps> = ({
     if (!matchesQuery) return false;
     if (filterMode === 'assigned') return Boolean(it.assignedTo);
     if (filterMode === 'available') return !it.assignedTo;
+    if (filterMode === 'purchased') return Boolean(it.purchased);
     return true;
   });
 
@@ -716,16 +729,22 @@ export const OrganizerView: React.FC<OrganizerViewProps> = ({
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
               <div>
                 <div className="text-[10px] font-arcade text-cyan-400 uppercase tracking-widest">
-                  PARTY PROGRESS: {potluckStats.percent}%
+                  PARTY PROGRESS: {potluckStats.percent}% ASIGNADOS
                 </div>
-                <div className="text-base sm:text-lg font-pixel text-white mt-1">
-                  {potluckStats.assigned} / {potluckStats.total} ITEMS ASIGNADOS
+                <div className="flex items-center gap-2.5 mt-1 flex-wrap">
+                  <span className="text-base sm:text-lg font-pixel text-white">
+                    {potluckStats.assigned} / {potluckStats.total} TOMADOS
+                  </span>
+                  <span className="text-xs font-pixel px-2 py-0.5 bg-emerald-950/90 text-emerald-300 border border-emerald-400 flex items-center gap-1">
+                    <ShoppingCart className="w-3.5 h-3.5 text-emerald-400" />
+                    {potluckStats.purchased} / {potluckStats.assigned} COMPRADOS ({potluckStats.purchasedPercent}%)
+                  </span>
                 </div>
               </div>
 
               <div className="flex items-center gap-2">
                 <span className="text-xs font-pixel px-2.5 py-1 bg-[#1a1f30] text-amber-300 border border-amber-500/40">
-                  {potluckStats.remaining} RESTANTES
+                  {potluckStats.remaining} LIBRES
                 </span>
                 <button
                   onClick={onOpenQR}
@@ -936,6 +955,16 @@ export const OrganizerView: React.FC<OrganizerViewProps> = ({
                 >
                   LIBRES ({potluckStats.remaining})
                 </button>
+                <button
+                  onClick={() => setFilterMode('purchased')}
+                  className={`px-2.5 py-1 text-xs font-pixel transition ${
+                    filterMode === 'purchased'
+                      ? 'bg-purple-500 text-white font-bold'
+                      : 'text-slate-400 hover:text-purple-300'
+                  }`}
+                >
+                  COMPRADOS ({potluckStats.purchased})
+                </button>
               </div>
 
               {/* Search */}
@@ -1111,11 +1140,36 @@ export const OrganizerView: React.FC<OrganizerViewProps> = ({
                         ) : (
                           <>
                             {item.assignedTo ? (
-                              <div className="flex items-center gap-1.5">
+                              <div className="flex items-center gap-1.5 flex-wrap">
                                 <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-pixel bg-emerald-950 text-emerald-300 border border-emerald-400">
                                   <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
                                   <span>{item.assignedTo}</span>
                                 </span>
+
+                                {/* Purchase status toggle button */}
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleItemPurchased(item.id, !item.purchased)}
+                                  className={`inline-flex items-center gap-1 px-2 py-1 text-[10px] font-pixel border transition cursor-pointer ${
+                                    item.purchased
+                                      ? 'bg-emerald-950 text-emerald-300 border-emerald-400 hover:bg-emerald-900'
+                                      : 'bg-amber-950/80 text-amber-300 border-amber-500/60 hover:bg-amber-900'
+                                  }`}
+                                  title={item.purchased ? 'Click para cambiar a pendiente' : 'Click para marcar como comprado'}
+                                >
+                                  {item.purchased ? (
+                                    <>
+                                      <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                                      <span>✓ COMPRADO</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Clock className="w-3 h-3 text-amber-400" />
+                                      <span>⏳ PENDIENTE</span>
+                                    </>
+                                  )}
+                                </button>
+
                                 <button
                                   onClick={() => handleUnassignItem(item.id)}
                                   className="p-1 text-slate-400 hover:text-rose-400"

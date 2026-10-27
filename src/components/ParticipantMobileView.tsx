@@ -5,11 +5,13 @@ import {
   assignPotluckItemWithTransaction,
   registerRaffleTicketWithTransaction,
   unassignPotluckItemInFirestore,
+  togglePotluckItemPurchasedInFirestore,
 } from '../services/eventService';
 import {
   assignRandomPotluckItem,
   registerRaffleTicket,
   unassignPotluckItem,
+  toggleItemPurchased,
 } from '../utils/officeDropLogic';
 import { sounds } from '../utils/soundEffects';
 import { getOrCreateDeviceId } from '../utils/deviceIdentifier';
@@ -21,6 +23,7 @@ import {
   AlertCircle,
   Sparkles,
   ShoppingBag,
+  ShoppingCart,
   BadgeDollarSign,
   ChevronDown,
   ChevronUp,
@@ -69,6 +72,8 @@ export const ParticipantMobileView: React.FC<ParticipantMobileViewProps> = ({
   const [showOtherItems, setShowOtherItems] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [copyFeedback, setCopyFeedback] = useState<'potluck' | 'raffle' | null>(null);
+  const [isConfirmPurchaseModalOpen, setIsConfirmPurchaseModalOpen] = useState(false);
+  const [isUpdatingPurchase, setIsUpdatingPurchase] = useState(false);
 
   // Restore participant name from localStorage for this specific eventId
   React.useEffect(() => {
@@ -148,7 +153,14 @@ export const ParticipantMobileView: React.FC<ParticipantMobileViewProps> = ({
 
     setErrorMsg(null);
     setIsOpeningBox(true);
-    sounds.playTick();
+    try {
+      sounds.playTick();
+    } catch {}
+
+    // Safari & Mobile Network Safety Guard: Guarantee isOpeningBox is never stuck
+    const safetyTimeout = setTimeout(() => {
+      setIsOpeningBox(false);
+    }, 3800);
 
     try {
       // 1. Save participant session to localStorage
@@ -156,38 +168,98 @@ export const ParticipantMobileView: React.FC<ParticipantMobileViewProps> = ({
         localStorage.setItem(`officedrop_participant_${event.id}`, currentUserName.trim());
       } catch {}
 
-      // 2. Call safe Firestore atomic transaction with deviceId
-      const result = await assignPotluckItemWithTransaction(event.id, currentUserName, deviceId);
+      // 2. Call safe Firestore atomic transaction with deviceId and safety timeout
+      const transactionPromise = assignPotluckItemWithTransaction(event.id, currentUserName, deviceId);
+      const timeoutPromise = new Promise<{ item: null; isExisting: false; error: string }>((_, reject) =>
+        setTimeout(() => reject(new Error('TIMEOUT_SAFARI')), 3000)
+      );
+
+      const result = await Promise.race([transactionPromise, timeoutPromise]);
       if (result.error) {
         setErrorMsg(result.error);
-        setIsOpeningBox(false);
         return;
       }
 
-      setIsOpeningBox(false);
-      sounds.playReveal();
-      confetti({
-        particleCount: 80,
-        spread: 60,
-        origin: { y: 0.7 },
-      });
+      if (result.item) {
+        const updatedItems = event.items.map((it) =>
+          it.id === result.item!.id ? result.item! : it
+        );
+        onUpdateEvent({ ...event, items: updatedItems });
+      }
+
+      try {
+        sounds.playReveal();
+      } catch {}
+      try {
+        confetti({
+          particleCount: 80,
+          spread: 60,
+          origin: { y: 0.7 },
+        });
+      } catch {}
     } catch (err: any) {
-      console.error(err);
-      // Resilient fallback to local logic if Firestore fails
+      console.warn('Firestore transaction slow or failed in Safari/network, using local fallback:', err);
+      // Resilient fallback to local logic if Firestore fails or times out in Safari
       const fallbackResult = assignRandomPotluckItem(event.items, currentUserName, deviceId);
       if (fallbackResult.error) {
         setErrorMsg(fallbackResult.error);
-        setIsOpeningBox(false);
         return;
       }
       onUpdateEvent({ ...event, items: fallbackResult.updatedItems });
+      try {
+        sounds.playReveal();
+      } catch {}
+      try {
+        confetti({
+          particleCount: 80,
+          spread: 60,
+          origin: { y: 0.7 },
+        });
+      } catch {}
+    } finally {
+      clearTimeout(safetyTimeout);
       setIsOpeningBox(false);
-      sounds.playReveal();
-      confetti({
-        particleCount: 80,
-        spread: 60,
-        origin: { y: 0.7 },
-      });
+    }
+  };
+
+  const handleTogglePurchased = async (newPurchasedState: boolean) => {
+    if (!assignedItem) return;
+    setIsUpdatingPurchase(true);
+
+    try {
+      // 1. Cache purchase state locally immediately
+      try {
+        localStorage.setItem(
+          `officedrop_purchased_${event.id}_${assignedItem.id}`,
+          newPurchasedState ? 'true' : 'false'
+        );
+      } catch {}
+
+      // 2. Instant optimistic UI update
+      const updated = toggleItemPurchased(event.items, assignedItem.id, newPurchasedState);
+      onUpdateEvent({ ...event, items: updated });
+
+      // 3. Audio & visual celebration on purchase confirmation
+      if (newPurchasedState) {
+        try {
+          sounds.playFanfare();
+        } catch {}
+        try {
+          confetti({
+            particleCount: 65,
+            spread: 60,
+            origin: { y: 0.65 },
+          });
+        } catch {}
+      }
+
+      // 4. Persist to Firestore
+      await togglePotluckItemPurchasedInFirestore(event.id, assignedItem.id, newPurchasedState);
+    } catch (err) {
+      console.warn('Could not persist purchase status to Firestore (offline fallback maintained):', err);
+    } finally {
+      setIsUpdatingPurchase(false);
+      setIsConfirmPurchaseModalOpen(false);
     }
   };
 
@@ -230,12 +302,20 @@ export const ParticipantMobileView: React.FC<ParticipantMobileViewProps> = ({
         return;
       }
 
-      sounds.playReveal();
-      confetti({
-        particleCount: 70,
-        spread: 60,
-        origin: { y: 0.7 },
-      });
+      if (result.ticket) {
+        onUpdateEvent({ ...event, tickets: [...event.tickets.filter(t => t.ticketNumber !== result.ticket!.ticketNumber), result.ticket] });
+      }
+
+      try {
+        sounds.playReveal();
+      } catch {}
+      try {
+        confetti({
+          particleCount: 70,
+          spread: 60,
+          origin: { y: 0.7 },
+        });
+      } catch {}
     } catch (err: any) {
       console.error(err);
       const fallback = registerRaffleTicket(event.tickets, currentUserName, deviceId);
@@ -244,12 +324,16 @@ export const ParticipantMobileView: React.FC<ParticipantMobileViewProps> = ({
         return;
       }
       onUpdateEvent({ ...event, tickets: fallback.updatedTickets });
-      sounds.playReveal();
-      confetti({
-        particleCount: 70,
-        spread: 60,
-        origin: { y: 0.7 },
-      });
+      try {
+        sounds.playReveal();
+      } catch {}
+      try {
+        confetti({
+          particleCount: 70,
+          spread: 60,
+          origin: { y: 0.7 },
+        });
+      } catch {}
     }
   };
 
@@ -629,6 +713,67 @@ export const ParticipantMobileView: React.FC<ParticipantMobileViewProps> = ({
                       </p>
                     </div>
 
+                    {/* Stage 3: Item Purchase / Aporte Confirmation Card */}
+                    <div className="mt-3 p-3 bg-[#0d111d] border-2 border-slate-700 space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[9px] font-arcade text-cyan-300 tracking-wider uppercase flex items-center gap-1">
+                          <ShoppingCart className="w-3.5 h-3.5 text-cyan-400" />
+                          ★ ESTADO DE COMPRA / APORTE ★
+                        </span>
+                        <span
+                          className={`px-2 py-0.5 text-[9px] font-pixel border ${
+                            assignedItem.purchased
+                              ? 'bg-emerald-950 text-emerald-300 border-emerald-400 animate-pulse'
+                              : 'bg-amber-950 text-amber-300 border-amber-500'
+                          }`}
+                        >
+                          {assignedItem.purchased ? '✓ COMPRADO' : '⏳ PENDIENTE'}
+                        </span>
+                      </div>
+
+                      {assignedItem.purchased ? (
+                        <div className="p-2.5 bg-emerald-950/70 border border-emerald-500 text-slate-200 space-y-2">
+                          <div className="flex items-start gap-2">
+                            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                            <div className="text-xs">
+                              <div className="font-pixel text-emerald-300 text-[10px] font-bold">
+                                ¡APORTE ASEGURADO Y LISTO!
+                              </div>
+                              <p className="text-[10px] text-slate-300 font-retro mt-0.5">
+                                Confirmaste que ya compraste o preparaste este ítem. Tus compañeros y organizador lo ven listo.
+                              </p>
+                              {assignedItem.purchasedAt && (
+                                <span className="block text-[9px] text-slate-400 font-mono mt-1">
+                                  Confirmado: {new Date(assignedItem.purchasedAt).toLocaleDateString()} {new Date(assignedItem.purchasedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => handleTogglePurchased(false)}
+                            disabled={isUpdatingPurchase}
+                            className="w-full py-1 text-[10px] font-pixel text-slate-400 hover:text-amber-300 underline text-center block"
+                          >
+                            [Desmarcar / Cambiar a pendiente si te equivocaste]
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          <p className="text-[10px] text-slate-300 font-retro leading-tight">
+                            ¿Ya fuiste a comprar o preparaste tu ítem? Confírmalo aquí para que el organizador y tus compañeros sepan que la comida ya está lista.
+                          </p>
+                          <button
+                            onClick={() => setIsConfirmPurchaseModalOpen(true)}
+                            disabled={isUpdatingPurchase}
+                            className="pixel-btn-green w-full py-2.5 text-xs font-arcade flex items-center justify-center gap-2 font-bold shadow-[2px_2px_0px_#000] active:translate-y-0.5 transition"
+                          >
+                            <ShoppingCart className="w-3.5 h-3.5" />
+                            <span>CONFIRMAR QUE YA LO COMPRÉ</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
                     {/* Self-Share & Download 8-Bit Arcade Actions */}
                     <div className="mt-3.5 pt-3 border-t-2 border-slate-800/80 space-y-2">
                       <div className="text-[9px] font-arcade text-cyan-300 tracking-wider uppercase">
@@ -937,6 +1082,74 @@ export const ParticipantMobileView: React.FC<ParticipantMobileViewProps> = ({
             </div>
           </div>
         </div>
+
+        {/* Purchase Confirmation Retro Modal */}
+        {isConfirmPurchaseModalOpen && assignedItem && (
+          <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
+            <div className="w-full max-w-sm bg-[#101424] border-4 border-emerald-400 p-5 shadow-[8px_8px_0px_#000] space-y-4">
+              <div className="flex items-center justify-between border-b border-emerald-500/40 pb-2.5">
+                <span className="text-xs font-arcade text-emerald-300 flex items-center gap-1.5">
+                  <ShoppingCart className="w-4 h-4 text-emerald-400" />
+                  ★ CONFIRMAR COMPRA ★
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setIsConfirmPurchaseModalOpen(false)}
+                  className="text-slate-400 hover:text-white font-mono text-xs px-1"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                <p className="text-xs font-retro text-slate-200 leading-relaxed">
+                  ¿Confirmas que ya compraste o preparaste este ítem para el compartir de oficina?
+                </p>
+
+                <div className="p-3 bg-black border-2 border-slate-700 space-y-1.5">
+                  <div className="text-[9px] font-pixel text-cyan-400 uppercase">ÍTEM A CONFIRMAR:</div>
+                  <div className="text-sm font-pixel font-bold text-white leading-snug">{assignedItem.nombre}</div>
+                  <div className="text-xs font-retro text-amber-300 font-bold">{assignedItem.cantidadEspecifica}</div>
+
+                  {assignedItem.subItems && assignedItem.subItems.length > 0 && (
+                    <div className="pt-2 mt-2 border-t border-slate-800 space-y-1">
+                      <span className="text-[9px] font-pixel text-slate-400">INCLUYE TODO ESTE PAQUETE:</span>
+                      {assignedItem.subItems.map((sub, idx) => (
+                        <div key={idx} className="text-[11px] font-retro text-emerald-300 flex items-center gap-1.5">
+                          <span>✓</span>
+                          <span>{sub.cantidadEspecifica} {sub.nombre}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <p className="text-[10px] text-slate-400 font-retro">
+                  Esto quedará guardado en la base de datos para que el organizador y tus compañeros vean que tu aporte está garantizado.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsConfirmPurchaseModalOpen(false)}
+                  disabled={isUpdatingPurchase}
+                  className="px-3 py-2.5 text-xs font-pixel text-slate-400 hover:text-white border border-slate-700 bg-black shadow-[2px_2px_0px_#000]"
+                >
+                  AÚN PENDIENTE
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleTogglePurchased(true)}
+                  disabled={isUpdatingPurchase}
+                  className="pixel-btn-green py-2.5 text-xs font-arcade font-bold flex items-center justify-center gap-1 shadow-[2px_2px_0px_#000] active:translate-y-0.5"
+                >
+                  <span>✓ SÍ, YA LO COMPRÉ</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

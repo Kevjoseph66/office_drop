@@ -12,7 +12,8 @@ class SoundController {
         }
       }
       if (this.ctx && this.ctx.state === 'suspended') {
-        this.ctx.resume();
+        // Safe catch for Safari autoplay policies
+        this.ctx.resume().catch(() => {});
       }
       return this.ctx;
     } catch {
@@ -20,58 +21,62 @@ class SoundController {
     }
   }
 
-  // 8-Bit Arcade Blip / Roulette Tick
+  // 8-Bit Arcade Blip / Roulette Tick (Safari-proof)
   playTick() {
-    const ctx = this.getContext();
-    if (!ctx) return;
     try {
+      const ctx = this.getContext();
+      if (!ctx) return;
+      const now = ctx.currentTime || 0;
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
-      osc.type = 'square'; // Classic NES/Arcade square wave
-      osc.frequency.setValueAtTime(440, ctx.currentTime);
-      osc.frequency.setValueAtTime(880, ctx.currentTime + 0.02);
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(440, now);
+      osc.frequency.setValueAtTime(880, now + 0.02);
 
-      gain.gain.setValueAtTime(0.12, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.05);
+      gain.gain.setValueAtTime(0.12, now);
+      // Use linear ramp to prevent Safari exponential ramp DOMExceptions
+      gain.gain.linearRampToValueAtTime(0.001, now + 0.05);
 
       osc.connect(gain);
       gain.connect(ctx.destination);
-      osc.start();
-      osc.stop(ctx.currentTime + 0.06);
+      osc.start(now);
+      osc.stop(now + 0.06);
     } catch {}
   }
 
-  // 8-Bit Powerup / Mystery Chest Reveal Sound
+  // 8-Bit Powerup / Mystery Chest Reveal Sound (Safari-proof)
   playReveal() {
-    const ctx = this.getContext();
-    if (!ctx) return;
     try {
-      const now = ctx.currentTime;
-      // Classic rapid 8-bit arpeggio
+      const ctx = this.getContext();
+      if (!ctx) return;
+      const now = ctx.currentTime || 0;
       const notes = [261.63, 329.63, 392.0, 523.25, 659.25, 783.99, 1046.5];
       notes.forEach((freq, idx) => {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'square';
-        osc.frequency.setValueAtTime(freq, now + idx * 0.045);
+        try {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'square';
+          const startTime = now + idx * 0.045;
+          osc.frequency.setValueAtTime(freq, startTime);
 
-        gain.gain.setValueAtTime(0.15, now + idx * 0.045);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.045 + 0.09);
+          gain.gain.setValueAtTime(0.15, startTime);
+          gain.gain.linearRampToValueAtTime(0.001, startTime + 0.08);
 
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start(now + idx * 0.045);
-        osc.stop(now + idx * 0.045 + 0.1);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(startTime);
+          osc.stop(startTime + 0.09);
+        } catch {}
       });
     } catch {}
   }
 
-  // 8-Bit Victory Arcade Fanfare
+  // 8-Bit Victory Arcade Fanfare (Safari-proof)
   playFanfare() {
-    const ctx = this.getContext();
-    if (!ctx) return;
     try {
-      const now = ctx.currentTime;
+      const ctx = this.getContext();
+      if (!ctx) return;
+      const now = ctx.currentTime || 0;
       const melody = [
         { f: 523.25, d: 0.1 },  // C5
         { f: 523.25, d: 0.1 },  // C5
@@ -84,19 +89,22 @@ class SoundController {
       ];
       let offset = 0;
       melody.forEach((item) => {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'square';
-        osc.frequency.setValueAtTime(item.f, now + offset);
+        try {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'square';
+          const startTime = now + offset;
+          osc.frequency.setValueAtTime(item.f, startTime);
 
-        gain.gain.setValueAtTime(0.2, now + offset);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + offset + item.d);
+          gain.gain.setValueAtTime(0.2, startTime);
+          gain.gain.linearRampToValueAtTime(0.001, startTime + item.d);
 
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start(now + offset);
-        osc.stop(now + offset + item.d + 0.02);
-        offset += item.d;
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(startTime);
+          osc.stop(startTime + item.d + 0.02);
+          offset += item.d;
+        } catch {}
       });
     } catch {}
   }
