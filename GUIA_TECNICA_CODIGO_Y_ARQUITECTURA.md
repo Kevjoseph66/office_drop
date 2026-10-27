@@ -572,6 +572,45 @@ Para saber si los participantes ya adquirieron sus productos:
 
 ---
 
+### 6.6 Ingeniería de Concurrencia y Resolución de Conflictos (Optimistic Concurrency Control)
+En eventos con decenas de personas en la misma sala, los participantes suelen escanear el QR y presionar "Abrir Regalo" en la misma fracción de segundo.
+
+#### 1. ¿Cómo funciona `runTransaction` ante accesos concurrentes?
+Firestore no bloquea tablas completas (lo que causaría cuellos de botella); en su lugar utiliza **Control de Concurrencia Optimista (OCC)**:
+
+```typescript
+await runTransaction(db, async (transaction) => {
+  // 1. Lectura del snapshot actual con su token de versión (v1)
+  const docSnap = await transaction.get(docRef);
+  const items = docSnap.data().items;
+
+  // 2. Lógica de negocio (filtrar libres, verificar anti-trampas, elegir al azar)
+  const available = items.filter(it => !it.assignedTo);
+  if (available.length === 0) throw new Error('Agotado');
+  const chosen = available[Math.floor(Math.random() * available.length)];
+
+  // 3. Escritura en buffer de transacción
+  transaction.update(docRef, { items: updatedItems });
+});
+```
+
+#### 2. Ciclo de Vida del Conflicto de Versión:
+1. **Cliente 1** y **Cliente 2** leen la versión `v1` simultáneamente. Ambos ven el ítem *"Arepas"* disponible.
+2. **Cliente 1** completa su cálculo primero y envía el commit. Firestore verifica que el documento en el servidor sigue en `v1`, aplica el cambio y lo promueve a `v2`.
+3. **Cliente 2** intenta enviar su commit esperando `v1`. El servidor detecta `v2 !== v1` (**conflicto de versión**).
+4. El SDK de Firestore **aborta automáticamente** el intento de Cliente 2, espera un tiempo aleatorio (*jittered backoff* de microsegundos) y **vuelve a ejecutar toda la función de transacción** desde el principio.
+5. En el segundo intento, Cliente 2 lee el documento fresco en `v2`, donde *"Arepas"* ya está tomado por Cliente 1. Cliente 2 selecciona aleatoriamente entre los ítems restantes y hace commit a `v3`.
+6. **Resultado:** Cero colisiones, cero sobrescrituras y cero duplicados.
+
+#### 3. Validación Automatizada en Suite de Pruebas (`concurrency.test.ts`):
+Se diseñó un simulador de concurrencia in-memory que prueba:
+- **20 participantes simultáneos:** Se lanzan en paralelo mediante `Promise.all` contra el mismo documento; se verifica que el `Set` de IDs resultantes tenga tamaño 20 (cero duplicados).
+- **Sobredemanda (30 personas para 10 ítems):** Exactamente 10 obtienen ítem y 20 reciben el mensaje de agotado.
+- **Rifas simultáneas:** 25 boletos emitidos al mismo instante obtienen números estrictamente secuenciales del 1 al 25.
+- **Idempotencia:** 5 clics rápidos del mismo usuario devuelven exactamente el mismo ítem.
+
+---
+
 ## 7. Glosario de Términos para Futuros Ingenieros de Software
 
 | Término | Explicación Sencilla |

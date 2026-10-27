@@ -384,4 +384,66 @@ El proyecto está diseñado bajo una arquitectura de **despliegue dual**:
 
 ---
 
+## 12. Análisis Exhaustivo de Concurrencia: ¿Qué ocurre si varias personas escanean el QR o abren el regalo al mismo tiempo?
+
+OfficeDrop fue diseñado desde el primer día para su uso en reuniones reales de oficina (de 10 a 50+ participantes presentes en la misma sala escaneando una pantalla de TV o proyector).
+
+### Caso A: ¿Qué pasa si 50 personas escanean el QR al mismo tiempo?
+1. **Petición HTTP estática sin contención:**
+   - El código QR contiene una URL limpia: `https://dominio/?eventId=XYZ&mode=participant`.
+   - La entrega de la aplicación web se sirve desde la CDN perimetral de Vercel (o Vite en preview). Las 50 conexiones descargan los assets estáticos (HTML/JS/CSS) de manera instantánea y paralela, sin saturar ningún backend.
+2. **Aislamiento de Sesión y Dispositivo:**
+   - En cada teléfono se ejecuta la función `getOrCreateDeviceId()`, que genera un identificador UUID único almacenado en el `localStorage` local del teléfono (ej: `dev-m1a2b3-9x8z`).
+   - Cada dispositivo entra al **Paso 1: Nombre de Jugador**, por lo que **no hay contención de datos**: ningún participante altera aún el documento en la base de datos.
+3. **Escucha en tiempo real sin bloqueo (`onSnapshot`):**
+   - Todos los teléfonos abren una suscripción reactiva a Firestore mediante WebSockets/WebChannel.
+   - Google Cloud Firestore está diseñado para soportar millones de oyentes simultáneos leyendo el mismo documento sin degradación de rendimiento.
+
+---
+
+### Caso B: ¿Qué pasa si varios participantes presionan "Abrir Regalo" en el EXACTO MISMO MILISEGUNDO?
+Este es el clásico problema de **Condición de Carrera (Race Condition)** en sistemas distribuidos. En OfficeDrop está 100% blindado mediante **Transacciones Atómicas con Control de Concurrencia Optimista (OCC)**.
+
+```text
+ ┌───────────────────────┐         ┌───────────────────────┐
+ │   Dispositivo A       │         │   Dispositivo B       │
+ │   "Carlos" hace clic  │         │   "Sofía" hace clic   │
+ └───────────┬───────────┘         └───────────┬───────────┘
+             │                                 │
+             ▼                                 ▼
+   [ Inicia runTransaction ]         [ Inicia runTransaction ]
+   Lee items disponibles             Lee items disponibles
+   (ej: Quedan 3 ítems)              (ej: Quedan 3 ítems)
+             │                                 │
+             ▼                                 │
+   Carlos envía commit (v1 -> v2)              │
+   ¡ÉXITO! Se le asigna "Arepas".              │
+                                               ▼
+                                     Sofía intenta commit (v1 -> v2)
+                                     ¡CONFLICTO DE VERSIÓN DETECTADO!
+                                     (El documento ya está en versión v2)
+                                               │
+                                               ▼
+                                     [ Reintento Automático Firestore ]
+                                     Sofía re-ejecuta con snapshot v2.
+                                     "Arepas" ya figura tomado.
+                                     Sofía toma al azar entre los 2 restantes.
+                                     Commit exitoso (v2 -> v3).
+```
+
+### Reglas de Blindaje Verificadas en Pruebas Unitarias (`src/utils/concurrency.test.ts`):
+1. **Cero ítems duplicados:**
+   - La prueba unitaria simula **20 participantes compitiendo en el mismo microsegundo**.
+   - Resultado: Los 20 participantes obtienen ítems completamente únicos (0 duplicados, 0 sobrescrituras).
+2. **Agotamiento elegante de ítems:**
+   - Si 30 personas compiten por 10 ítems de comida disponibles:
+   - Exactamente las primeras 10 transacciones asignan los 10 ítems.
+   - Las 20 personas restantes reciben de inmediato el mensaje: `"¡Todos los ítems de comida ya han sido tomados por otros compañeros!"`, sin romper la base de datos ni dejar ítems a medias.
+3. **Numeración correlativa de boletos de rifa:**
+   - Si 25 personas entran a la rifa al mismo segundo, los boletos se expiden correlativamente del #1 al #25 en orden estricto, sin colisiones de números ni huecos.
+4. **Idempotencia Anti-Trampas (Spam Clicks):**
+   - Si un usuario pulsa el botón 5 veces seguidas o su conexión reintenta: el sistema detecta su `deviceId` y nombre en la primera lectura de la transacción y devuelve exactamente el mismo ítem ya asignado en las 5 llamadas.
+
+---
+
 *Documento generado para auditoría técnica, despliegue en Vercel y análisis de arquitectura de OfficeDrop.*

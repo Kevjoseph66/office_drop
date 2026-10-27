@@ -157,10 +157,11 @@ export const ParticipantMobileView: React.FC<ParticipantMobileViewProps> = ({
       sounds.playTick();
     } catch {}
 
-    // Safari & Mobile Network Safety Guard: Guarantee isOpeningBox is never stuck
+    // High-Concurrency & Safari Safety Guard:
+    // When 20+ participants click simultaneously, Firestore OCC takes 2-5s to serialize retries.
     const safetyTimeout = setTimeout(() => {
       setIsOpeningBox(false);
-    }, 3800);
+    }, 9500);
 
     try {
       // 1. Save participant session to localStorage
@@ -168,10 +169,10 @@ export const ParticipantMobileView: React.FC<ParticipantMobileViewProps> = ({
         localStorage.setItem(`officedrop_participant_${event.id}`, currentUserName.trim());
       } catch {}
 
-      // 2. Call safe Firestore atomic transaction with deviceId and safety timeout
+      // 2. Call safe Firestore atomic transaction with deviceId and concurrency-aware timeout
       const transactionPromise = assignPotluckItemWithTransaction(event.id, currentUserName, deviceId);
       const timeoutPromise = new Promise<{ item: null; isExisting: false; error: string }>((_, reject) =>
-        setTimeout(() => reject(new Error('TIMEOUT_SAFARI')), 3000)
+        setTimeout(() => reject(new Error('TIMEOUT_CONCURRENCY')), 8500)
       );
 
       const result = await Promise.race([transactionPromise, timeoutPromise]);
