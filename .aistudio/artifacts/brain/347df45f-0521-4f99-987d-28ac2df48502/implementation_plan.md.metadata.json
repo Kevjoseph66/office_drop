@@ -1,6 +1,0 @@
-{
-  "summary":  "Plan de implementación ejecutado con éxito: Reinicio a modo producción en blanco, vaciado de título y descripción en Firestore, eliminación de jugadores simulados de la barra y almacenamiento local, y validación de entrada limpia para participantes reales.",
-  "updatedAt":  "2026-10-27T03:22:19.451715828Z",
-  "requestFeedback":  true,
-  "userFacing":  true
-}
