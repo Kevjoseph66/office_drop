@@ -1,0 +1,6 @@
+{
+  "name": "OfficeDrop - Dinámicas de Oficina, Compartir y Rifas",
+  "description": "Organiza dinámicas de oficina: listas de comida para compartir con IA equilibradas en costo y rifas interactivas con ruleta y tickets digitales.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,194 @@
+@import "tailwindcss";
+
+@theme {
+  --font-arcade: 'Press Start 2P', monospace;
+  --font-pixel: 'Silkscreen', monospace;
+  --font-retro: 'VT323', monospace;
+}
+
+@layer base {
+  body {
+    background-color: #060911;
+    color: #e2e8f0;
+    font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    background-image: 
+      radial-gradient(circle at 50% 0%, rgba(6, 182, 212, 0.08) 0%, transparent 60%),
+      radial-gradient(circle at 100% 100%, rgba(168, 85, 247, 0.06) 0%, transparent 50%);
+    background-attachment: fixed;
+  }
+}
+
+/* Custom Pixel & Retro Typography Utilities */
+.font-arcade {
+  font-family: 'Press Start 2P', cursive, monospace;
+}
+
+.font-pixel {
+  font-family: 'Silkscreen', cursive, monospace;
+}
+
+.font-retro {
+  font-family: 'VT323', monospace;
+}
+
+/* CRT Scanlines Overlay */
+.crt-scanlines {
+  position: relative;
+}
+
+.crt-scanlines::after {
+  content: " ";
+  display: block;
+  position: absolute;
+  top: 0; left: 0; bottom: 0; right: 0;
+  background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.35) 50%);
+  background-size: 100% 4px;
+  z-index: 20;
+  pointer-events: none;
+  opacity: 0.5;
+}
+
+/* Pixel Art Boxes with hard 3D arcade edges and neon tints */
+.pixel-box-cyan {
+  background-color: #0b111e;
+  border: 3px solid #06b6d4;
+  box-shadow: 4px 4px 0px #022c35, inset 0 0 20px rgba(6, 182, 212, 0.12);
+}
+
+.pixel-box-purple {
+  background-color: #120e24;
+  border: 3px solid #a855f7;
+  box-shadow: 4px 4px 0px #3b0764, inset 0 0 20px rgba(168, 85, 247, 0.12);
+}
+
+.pixel-box-amber {
+  background-color: #1a1207;
+  border: 3px solid #f59e0b;
+  box-shadow: 4px 4px 0px #451a03, inset 0 0 20px rgba(245, 158, 11, 0.12);
+}
+
+.pixel-box-rose {
+  background-color: #1b0a11;
+  border: 3px solid #f43f5e;
+  box-shadow: 4px 4px 0px #4c0519, inset 0 0 20px rgba(244, 63, 94, 0.12);
+}
+
+.pixel-box-emerald {
+  background-color: #081611;
+  border: 3px solid #10b981;
+  box-shadow: 4px 4px 0px #022c22, inset 0 0 20px rgba(16, 185, 129, 0.12);
+}
+
+/* Pixel Arcade Buttons with hard click feedback */
+.pixel-btn-cyan {
+  background-color: #06b6d4;
+  color: #021a24;
+  border: 2px solid #67e8f9;
+  box-shadow: 3px 3px 0px #083344;
+  transition: all 0.05s ease;
+}
+.pixel-btn-cyan:hover {
+  background-color: #22d3ee;
+  transform: translate(-1px, -1px);
+  box-shadow: 4px 4px 0px #083344;
+}
+.pixel-btn-cyan:active {
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0px #083344;
+}
+
+.pixel-btn-green {
+  background-color: #10b981;
+  color: #022013;
+  border: 2px solid #6ee7b7;
+  box-shadow: 3px 3px 0px #064e3b;
+  transition: all 0.05s ease;
+}
+.pixel-btn-green:hover {
+  background-color: #34d399;
+  transform: translate(-1px, -1px);
+  box-shadow: 4px 4px 0px #064e3b;
+}
+.pixel-btn-green:active {
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0px #064e3b;
+}
+
+.pixel-btn-amber {
+  background-color: #f59e0b;
+  color: #261203;
+  border: 2px solid #fcd34d;
+  box-shadow: 3px 3px 0px #451a03;
+  transition: all 0.05s ease;
+}
+.pixel-btn-amber:hover {
+  background-color: #fbbf24;
+  transform: translate(-1px, -1px);
+  box-shadow: 4px 4px 0px #451a03;
+}
+.pixel-btn-amber:active {
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0px #451a03;
+}
+
+.pixel-btn-purple {
+  background-color: #a855f7;
+  color: #1a082e;
+  border: 2px solid #d8b4fe;
+  box-shadow: 3px 3px 0px #3b0764;
+  transition: all 0.05s ease;
+}
+.pixel-btn-purple:hover {
+  background-color: #c084fc;
+  transform: translate(-1px, -1px);
+  box-shadow: 4px 4px 0px #3b0764;
+}
+.pixel-btn-purple:active {
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0px #3b0764;
+}
+
+.pixel-btn-rose {
+  background-color: #f43f5e;
+  color: #28040d;
+  border: 2px solid #fda4af;
+  box-shadow: 3px 3px 0px #4c0519;
+  transition: all 0.05s ease;
+}
+.pixel-btn-rose:hover {
+  background-color: #fb7185;
+  transform: translate(-1px, -1px);
+  box-shadow: 4px 4px 0px #4c0519;
+}
+.pixel-btn-rose:active {
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0px #4c0519;
+}
+
+/* Blinking arcade animation */
+@keyframes arcade-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.animate-arcade-blink {
+  animation: arcade-blink 0.9s steps(2, start) infinite;
+}
+
+/* Custom 8-bit Scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #080b12;
+  border-left: 1px solid #1e2638;
+}
+::-webkit-scrollbar-thumb {
+  background: #06b6d4;
+  border: 2px solid #080b12;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #22d3ee;
+}
