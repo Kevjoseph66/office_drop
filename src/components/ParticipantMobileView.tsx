@@ -74,46 +74,45 @@ export const ParticipantMobileView: React.FC<ParticipantMobileViewProps> = ({
   React.useEffect(() => {
     try {
       const savedName = localStorage.getItem(`officedrop_participant_${event.id}`);
-      if (savedName && savedName.trim()) {
+      if (savedName && savedName.trim() && savedName.trim() !== 'Tú') {
         onUserNameChange(savedName.trim());
         setInputName(savedName.trim());
         setIsEditingName(false);
+      } else {
+        if (!currentUserName || currentUserName === 'Tú') {
+          onUserNameChange('');
+          setInputName('');
+          setIsEditingName(true);
+        }
       }
     } catch {}
   }, [event.id]);
 
   const deviceId = getOrCreateDeviceId();
 
+  // ONLY match assignedItem if a specific user name has been entered and is NOT empty or generic 'Tú'
+  const validUserName =
+    currentUserName && currentUserName.trim() !== '' && currentUserName.trim() !== 'Tú'
+      ? currentUserName.trim().toLowerCase()
+      : null;
+
   const assignedItem =
-    event.type === 'potluck'
+    event.type === 'potluck' && validUserName
       ? event.items.find(
           (it) =>
-            (it.assignedTo && currentUserName && it.assignedTo.trim().toLowerCase() === currentUserName.trim().toLowerCase()) ||
-            (Boolean(it.assignedDeviceId) && it.assignedDeviceId === deviceId)
-        )
+            it.assignedTo &&
+            it.assignedTo.trim().toLowerCase() === validUserName
+        ) || null
       : null;
 
   const userTicket =
-    event.type === 'raffle'
+    event.type === 'raffle' && validUserName
       ? event.tickets.find(
           (t) =>
-            (currentUserName && t.userName.trim().toLowerCase() === currentUserName.trim().toLowerCase()) ||
-            (Boolean(t.deviceId) && t.deviceId === deviceId)
-        )
+            t.userName &&
+            t.userName.trim().toLowerCase() === validUserName
+        ) || null
       : null;
-
-  // Auto-fill participant name if this phone already claimed an item/ticket previously
-  React.useEffect(() => {
-    if (assignedItem && assignedItem.assignedTo && !currentUserName) {
-      onUserNameChange(assignedItem.assignedTo);
-      setInputName(assignedItem.assignedTo);
-      setIsEditingName(false);
-    } else if (userTicket && userTicket.userName && !currentUserName) {
-      onUserNameChange(userTicket.userName);
-      setInputName(userTicket.userName);
-      setIsEditingName(false);
-    }
-  }, [assignedItem, userTicket, currentUserName, onUserNameChange]);
 
   const isWinner =
     event.type === 'raffle' &&
@@ -408,19 +407,21 @@ export const ParticipantMobileView: React.FC<ParticipantMobileViewProps> = ({
                 <div>
                   <div className="text-[10px] text-slate-400">PLAYER:</div>
                   <div className="text-xs font-bold text-cyan-300 tracking-wider">
-                    {currentUserName}
+                    {validUserName ? currentUserName : 'SIN REGISTRAR'}
                   </div>
                 </div>
               </div>
-              <button
-                onClick={() => {
-                  setInputName(currentUserName);
-                  setIsEditingName(true);
-                }}
-                className="text-[10px] font-pixel text-slate-400 hover:text-cyan-300 underline"
-              >
-                [CAMBIAR]
-              </button>
+              {validUserName && !assignedItem && (
+                <button
+                  onClick={() => {
+                    setInputName(currentUserName);
+                    setIsEditingName(true);
+                  }}
+                  className="text-[10px] font-pixel text-slate-400 hover:text-cyan-300 underline"
+                >
+                  [CAMBIAR]
+                </button>
+              )}
             </>
           )}
         </div>
@@ -438,8 +439,46 @@ export const ParticipantMobileView: React.FC<ParticipantMobileViewProps> = ({
           {/* ================= STAGE 1: POTLUCK QUEST ================= */}
           {event.type === 'potluck' && (
             <div className="space-y-4">
-              {!assignedItem ? (
-                /* Unassigned: Mystery Chest or Empty Menu */
+              {!validUserName ? (
+                /* STEP 1: Enter Player Name First */
+                <div className="p-5 sm:p-6 bg-[#0f1424] border-4 border-cyan-400 shadow-[6px_6px_0px_#000] text-center space-y-4 my-2 crt-scanlines">
+                  <div className="w-16 h-16 mx-auto bg-black border-2 border-cyan-400 flex items-center justify-center text-3xl shadow-[0_0_20px_rgba(6,182,212,0.4)] animate-pulse">
+                    👾
+                  </div>
+                  <div>
+                    <span className="inline-block px-2.5 py-0.5 bg-cyan-950 text-cyan-300 border border-cyan-500/50 text-[10px] font-pixel mb-2">
+                      ★ PASO 1: TU JUGADOR ★
+                    </span>
+                    <h2 className="text-base sm:text-lg font-arcade text-white tracking-wide">
+                      ¿CÓMO TE LLAMAS?
+                    </h2>
+                    <p className="text-xs text-slate-300 font-retro mt-1 max-w-xs mx-auto">
+                      Ingresa tu nombre o apodo para que tus compañeros sepan qué llevarás al compartir.
+                    </p>
+                  </div>
+
+                  <form onSubmit={handleSaveName} className="space-y-3 pt-1">
+                    <input
+                      type="text"
+                      value={inputName}
+                      onChange={(e) => setInputName(e.target.value)}
+                      placeholder="ESCRIBE TU NOMBRE..."
+                      autoFocus
+                      maxLength={30}
+                      className="w-full px-3 py-2.5 text-center text-xs bg-black border-2 border-cyan-400 text-cyan-300 font-pixel uppercase focus:outline-none focus:border-emerald-400 shadow-inner"
+                    />
+                    <button
+                      type="submit"
+                      disabled={!inputName.trim()}
+                      className="pixel-btn-green w-full py-3 text-xs font-arcade font-bold flex items-center justify-center gap-2 tracking-wider shadow-[3px_3px_0px_#000] disabled:opacity-50"
+                    >
+                      <span>CONTINUAR AL COFRE</span>
+                      <Sparkles className="w-4 h-4" />
+                    </button>
+                  </form>
+                </div>
+              ) : !assignedItem ? (
+                /* STEP 2: Player Name is confirmed. Mystery Chest is closed and ready to open! */
                 event.items.length === 0 ? (
                   <div className="text-center py-8 px-4 bg-[#131625] border-2 border-dashed border-amber-500/50 my-4 space-y-3">
                     <div className="w-12 h-12 mx-auto bg-amber-500/20 border-2 border-amber-500/60 flex items-center justify-center text-2xl shadow-[0_0_15px_rgba(245,158,11,0.2)]">
@@ -460,17 +499,17 @@ export const ParticipantMobileView: React.FC<ParticipantMobileViewProps> = ({
                     </div>
                   </div>
                 ) : (
-                  <div className="text-center py-4">
-                    <div className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-pixel bg-cyan-950 text-cyan-300 border border-cyan-500/40 mb-3">
+                  <div className="text-center py-4 space-y-2">
+                    <div className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-pixel bg-cyan-950 text-cyan-300 border border-cyan-500/40">
                       <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                      SECRET LOOT DROP
+                      PASO 2: ABRIR REGALO
                     </div>
 
-                    <h2 className="text-sm sm:text-base font-arcade text-white tracking-wide">
-                      ¿QUÉ TE TOCARÁ TRAER?
+                    <h2 className="text-base sm:text-lg font-arcade text-white tracking-wide">
+                      ¡HOLA, {currentUserName}!
                     </h2>
-                    <p className="text-xs text-slate-400 font-retro mt-1.5 max-w-xs mx-auto">
-                      Abre el cofre secreto para recibir un ítem disponible al azar sin repetidos.
+                    <p className="text-xs text-slate-300 font-retro max-w-xs mx-auto">
+                      Toca el cofre secreto o presiona el botón para descubrir qué comida o bebida te tocará traer.
                     </p>
 
                     {/* 8-Bit Pixel Mystery Chest Button */}
@@ -479,7 +518,7 @@ export const ParticipantMobileView: React.FC<ParticipantMobileViewProps> = ({
                         onClick={handleDiscoverPotluckItem}
                         disabled={isOpeningBox || availableItemsCount === 0}
                         className={`group relative w-44 h-44 bg-[#1a1f33] border-4 border-cyan-400 shadow-[6px_6px_0px_#042f2e,0_0_20px_rgba(6,182,212,0.25)] flex flex-col items-center justify-center p-3 transition active:translate-x-1 active:translate-y-1 hover:border-pink-400 disabled:opacity-50 disabled:cursor-not-allowed ${
-                          isOpeningBox ? 'animate-bounce' : ''
+                          isOpeningBox ? 'animate-bounce' : 'hover:scale-105'
                         }`}
                       >
                         <div className="w-16 h-16 bg-black/60 border-2 border-dashed border-amber-400 flex items-center justify-center mb-2 shadow-inner group-hover:scale-110 transition">
@@ -488,10 +527,10 @@ export const ParticipantMobileView: React.FC<ParticipantMobileViewProps> = ({
                           </span>
                         </div>
                         <span className="font-arcade text-[10px] text-amber-300 uppercase tracking-widest text-center mt-1">
-                          {isOpeningBox ? 'ABRIENDO...' : '► TOCAR COFRE ◄'}
+                          {isOpeningBox ? 'ABRIENDO...' : '► ABRIR REGALO ◄'}
                         </span>
                         <span className="text-[10px] font-pixel text-cyan-300 mt-1">
-                          {availableItemsCount} ITEMS RESTANTES
+                          {availableItemsCount} DISPONIBLES
                         </span>
                       </button>
                     </div>
@@ -504,25 +543,25 @@ export const ParticipantMobileView: React.FC<ParticipantMobileViewProps> = ({
                       <button
                         onClick={handleDiscoverPotluckItem}
                         disabled={isOpeningBox}
-                        className="pixel-btn-cyan w-full py-3 text-xs font-arcade tracking-wider flex items-center justify-center gap-2 font-bold"
+                        className="pixel-btn-cyan w-full py-3.5 text-xs font-arcade tracking-wider flex items-center justify-center gap-2 font-bold shadow-[4px_4px_0px_#000]"
                       >
                         <Gift className="w-4 h-4" />
-                        <span>{isOpeningBox ? 'SORTEANDO...' : '¡ABRIR COFRE SECRETO!'}</span>
+                        <span>{isOpeningBox ? 'ABRIENDO COFRE...' : '¡ABRIR REGALO Y DESCUBRIR!'}</span>
                       </button>
                     )}
                   </div>
                 )
               ) : (
-                /* Assigned: Retro Quest Loot Card */
+                /* STEP 3: Assigned: Retro Quest Loot Card with Sub-items Support */
                 <div className="space-y-4 animate-in zoom-in-95 duration-300">
                   <div className="pixel-box-cyan p-5 relative overflow-hidden bg-gradient-to-b from-[#101524] to-[#171b30]">
                     <div className="flex items-center gap-2 text-emerald-400 text-xs font-arcade mb-2">
                       <CheckCircle2 className="w-4 h-4" />
-                      <span>★ LOOT DESBLOQUEADO ★</span>
+                      <span>★ MISIÓN ASIGNADA ★</span>
                     </div>
 
                     <div className="text-[11px] font-pixel text-slate-400">
-                      ASIGNADO A: {currentUserName}
+                      AGENTE: {currentUserName}
                     </div>
                     <div className="text-base sm:text-lg font-pixel font-bold text-white mt-1 leading-snug">
                       {assignedItem.nombre}
@@ -530,11 +569,44 @@ export const ParticipantMobileView: React.FC<ParticipantMobileViewProps> = ({
 
                     <div className="mt-3 p-3 bg-black border-2 border-slate-700 space-y-2">
                       <div>
-                        <div className="text-[9px] uppercase font-arcade text-slate-400">CANTIDAD A TRAER:</div>
+                        <div className="text-[9px] uppercase font-arcade text-slate-400">CANTIDAD PRINCIPAL:</div>
                         <div className="text-xs font-retro font-bold text-cyan-300 mt-0.5">
                           {assignedItem.cantidadEspecifica}
                         </div>
                       </div>
+
+                      {/* Sub-items / Combo List Support */}
+                      {assignedItem.subItems && assignedItem.subItems.length > 0 && (
+                        <div className="mt-3 pt-3 border-t border-slate-800 space-y-2">
+                          <div className="text-[10px] font-pixel text-purple-300 flex items-center gap-1.5 uppercase">
+                            <ShoppingBag className="w-3.5 h-3.5 text-purple-400" />
+                            <span>ESTE TICKET INCLUYE {assignedItem.subItems.length} PRODUCTOS:</span>
+                          </div>
+                          <div className="space-y-1.5">
+                            {assignedItem.subItems.map((sub, sIdx) => (
+                              <div
+                                key={sIdx}
+                                className="p-2 bg-[#101424] border border-purple-500/40 text-xs font-retro flex items-start gap-2"
+                              >
+                                <span className="text-purple-400 font-pixel text-[11px] font-bold">
+                                  [{sIdx + 1}]
+                                </span>
+                                <div className="flex-1">
+                                  <div className="font-bold text-white text-xs">{sub.nombre}</div>
+                                  <div className="text-[11px] text-cyan-300 mt-0.5">
+                                    {sub.cantidadEspecifica}
+                                  </div>
+                                </div>
+                                {sub.categoria && (
+                                  <span className="text-[9px] px-1.5 py-0.5 bg-black text-slate-300 border border-slate-700">
+                                    {sub.categoria}
+                                  </span>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
 
                       <div className="flex items-center justify-between pt-2 border-t border-slate-800 text-xs font-pixel">
                         <span className="px-2 py-0.5 bg-cyan-950 text-cyan-300 border border-cyan-500/40 text-[10px]">
@@ -678,14 +750,49 @@ export const ParticipantMobileView: React.FC<ParticipantMobileViewProps> = ({
               </div>
 
               {/* Ticket State */}
-              {!userTicket ? (
+              {!validUserName ? (
+                <div className="p-5 bg-[#1c1510] border-4 border-amber-400 shadow-[6px_6px_0px_#000] text-center space-y-4 my-2 crt-scanlines">
+                  <div className="w-16 h-16 mx-auto bg-black border-2 border-amber-400 flex items-center justify-center text-3xl shadow-[0_0_20px_rgba(245,158,11,0.4)] animate-pulse">
+                    🎟️
+                  </div>
+                  <div>
+                    <span className="inline-block px-2.5 py-0.5 bg-amber-950 text-amber-300 border border-amber-500/50 text-[10px] font-pixel mb-2">
+                      ★ PASO 1: TU JUGADOR ★
+                    </span>
+                    <h2 className="text-base font-arcade text-white">¿A NOMBRE DE QUIÉN EL BOLETO?</h2>
+                    <p className="text-xs text-slate-300 font-retro mt-1 max-w-xs mx-auto">
+                      Ingresa tu nombre para emitir tu número de boleto en la ruleta del organizador.
+                    </p>
+                  </div>
+
+                  <form onSubmit={handleSaveName} className="space-y-3 pt-1">
+                    <input
+                      type="text"
+                      value={inputName}
+                      onChange={(e) => setInputName(e.target.value)}
+                      placeholder="ESCRIBE TU NOMBRE..."
+                      autoFocus
+                      maxLength={30}
+                      className="w-full px-3 py-2.5 text-center text-xs bg-black border-2 border-amber-400 text-amber-300 font-pixel uppercase focus:outline-none focus:border-yellow-300 shadow-inner"
+                    />
+                    <button
+                      type="submit"
+                      disabled={!inputName.trim()}
+                      className="pixel-btn-amber w-full py-3 text-xs font-arcade font-bold flex items-center justify-center gap-2 tracking-wider shadow-[3px_3px_0px_#000] disabled:opacity-50"
+                    >
+                      <span>CONTINUAR AL BOLETO</span>
+                      <Sparkles className="w-4 h-4" />
+                    </button>
+                  </form>
+                </div>
+              ) : !userTicket ? (
                 <div className="text-center py-6 space-y-4">
                   <div className="w-20 h-20 bg-black border-4 border-amber-400 flex items-center justify-center mx-auto text-3xl shadow-[4px_4px_0px_#451a03]">
                     🎟️
                   </div>
                   <div>
                     <h3 className="text-sm font-arcade text-white">
-                      ¡OBTÉN TU TICKET ARCADE!
+                      ¡HOLA {currentUserName}, OBTÉN TU TICKET!
                     </h3>
                     <p className="text-xs text-slate-400 font-retro mt-1 max-w-xs mx-auto">
                       Quedarás registrado en la ruleta para cuando el admin inicie el sorteo.

@@ -30,13 +30,22 @@ export function formatPotluckShareText(details: PotluckTicketDetails): string {
     `━━━━━━━━━━━━━━━━━━━━━━`,
     `👤 *Jugador:* ${participantName}`,
     `🎉 *Evento:* ${eventTitle || 'Compartir de Oficina'}`,
-    `📦 *Me tocó traer:* ${item.nombre}`,
-    `🔢 *Cantidad:* ${item.cantidadEspecifica}`,
-    `🏷️ *Categoría:* ${item.categoria}`,
-    `💰 *Costo estimado:* ${item.costoEstimado || 'N/A'}`,
-    `━━━━━━━━━━━━━━━━━━━━━━`,
-    `✅ *Asignación registrada en inventario oficial*`,
   ];
+
+  if (item.subItems && item.subItems.length > 0) {
+    lines.push(`📦 *Me tocó traer este combo de ${item.subItems.length} productos:*`);
+    item.subItems.forEach((sub, idx) => {
+      lines.push(`  ${idx + 1}️⃣ *${sub.nombre}*: ${sub.cantidadEspecifica}${sub.categoria ? ` [${sub.categoria}]` : ''}`);
+    });
+  } else {
+    lines.push(`📦 *Me tocó traer:* ${item.nombre}`);
+    lines.push(`🔢 *Cantidad:* ${item.cantidadEspecifica}`);
+    lines.push(`🏷️ *Categoría:* ${item.categoria}`);
+  }
+
+  lines.push(`💰 *Costo estimado:* ${item.costoEstimado || 'N/A'}`);
+  lines.push(`━━━━━━━━━━━━━━━━━━━━━━`);
+  lines.push(`✅ *Asignación registrada en inventario oficial*`);
 
   if (eventUrl) {
     lines.push(`🔗 *Ver evento:* ${eventUrl}`);
@@ -219,16 +228,22 @@ export function generatePotluckVoucherCanvas(details: PotluckTicketDetails): str
   ctx.fillStyle = '#ffffff';
   ctx.font = 'bold 22px "Courier New", monospace';
   const truncatedItem = details.item.nombre.length > 32 ? details.item.nombre.substring(0, 30) + '...' : details.item.nombre;
-  ctx.fillText(truncatedItem, 50, 218);
+  ctx.fillText(truncatedItem, 50, 215);
 
   // Details inside box
   ctx.fillStyle = '#e2e8f0';
-  ctx.font = 'bold 14px "Courier New", monospace';
-  ctx.fillText(`CANTIDAD: ${details.item.cantidadEspecifica}`, 50, 252);
+  ctx.font = 'bold 13px "Courier New", monospace';
+  if (details.item.subItems && details.item.subItems.length > 0) {
+    const subList = details.item.subItems.map((s, idx) => `${idx + 1}. ${s.nombre} (${s.cantidadEspecifica})`).join(' | ');
+    const truncatedSubList = subList.length > 48 ? subList.substring(0, 46) + '...' : subList;
+    ctx.fillText(`COMBO: ${truncatedSubList}`, 50, 245);
+  } else {
+    ctx.fillText(`CANTIDAD: ${details.item.cantidadEspecifica}`, 50, 245);
+  }
 
   ctx.fillStyle = '#cbd5e1';
-  ctx.font = '13px "Courier New", monospace';
-  ctx.fillText(`CATEGORÍA: [${details.item.categoria}]  •  ESTIMADO: ${details.item.costoEstimado || '$0'}`, 50, 280);
+  ctx.font = '12px "Courier New", monospace';
+  ctx.fillText(`CATEGORÍA: [${details.item.categoria}]  •  ESTIMADO: ${details.item.costoEstimado || '$0'}`, 50, 275);
 
   // 7. Footer Decorative Retro Barcode & Instructions
   ctx.fillStyle = '#1e293b';

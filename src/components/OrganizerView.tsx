@@ -406,10 +406,11 @@ export const OrganizerView: React.FC<OrganizerViewProps> = ({
 
             <button
               onClick={() => setIsCreatingNew(!isCreatingNew)}
-              className="px-3 py-2.5 bg-[#181d2e] hover:bg-[#20273d] text-cyan-300 text-xs font-pixel border-2 border-slate-600 shadow-[3px_3px_0px_#000] transition flex items-center gap-1.5"
+              className="pixel-btn-cyan px-4 py-2.5 text-xs font-pixel flex items-center gap-2 font-bold"
+              title="Crear un nuevo evento o generar comida con IA Gemini"
             >
               <Plus className="w-4 h-4" />
-              <span>{isCreatingNew ? 'CERRAR' : 'CONFIG'}</span>
+              <span>{isCreatingNew ? '✕ CERRAR' : '+ CREAR EVENTO'}</span>
             </button>
 
             <button
@@ -1058,10 +1059,31 @@ export const OrganizerView: React.FC<OrganizerViewProps> = ({
                               <span className="text-[10px] font-pixel px-1.5 py-0.5 bg-[#1e2338] text-amber-300 border border-amber-500/30">
                                 {item.costoEstimado}
                               </span>
+                              {item.subItems && item.subItems.length > 0 && (
+                                <span className="text-[10px] font-pixel px-1.5 py-0.5 bg-purple-950 text-purple-300 border border-purple-500/50">
+                                  🎒 COMBO ({item.subItems.length} PRODUCTOS)
+                                </span>
+                              )}
                             </div>
                             <div className="text-xs text-slate-400 font-retro mt-1">
                               {item.cantidadEspecifica}
                             </div>
+                            {item.subItems && item.subItems.length > 0 && (
+                              <div className="mt-1.5 space-y-1 pl-2 border-l-2 border-purple-500/40">
+                                {item.subItems.map((sub, sIdx) => (
+                                  <div key={sIdx} className="text-[11px] font-retro text-purple-200 flex items-center gap-1.5">
+                                    <span className="text-purple-400">▸</span>
+                                    <span className="font-bold text-white">{sub.nombre}:</span>
+                                    <span className="text-slate-300">{sub.cantidadEspecifica}</span>
+                                    {sub.categoria && (
+                                      <span className="text-[9px] px-1 bg-black/50 text-cyan-300 border border-cyan-900">
+                                        [{sub.categoria}]
+                                      </span>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         </div>
                       )}

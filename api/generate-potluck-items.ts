@@ -5,11 +5,19 @@
 
 import { GoogleGenAI, Type } from '@google/genai';
 
+interface SubItemTemplate {
+  nombre: string;
+  cantidadEspecifica: string;
+  categoria?: string;
+  costoEstimado?: string;
+}
+
 interface ItemTemplate {
   nombre: string;
   cantidadEspecifica: string;
   categoria: string;
   costoEstimado: string;
+  subItems?: SubItemTemplate[];
 }
 
 // Fallback generator in case of missing API key or transient network issues
@@ -22,6 +30,16 @@ function generateSmartFallbackItems(
   const normalizedCount = Math.max(2, Math.min(count || 10, 50));
   const t = (title + ' ' + themeDescription).toLowerCase();
 
+  const isCriollo =
+    t.includes('crioll') ||
+    t.includes('arepa') ||
+    t.includes('empanad') ||
+    t.includes('venezol') ||
+    t.includes('colomb') ||
+    t.includes('latino') ||
+    t.includes('maracuy') ||
+    t.includes('hallac') ||
+    t.includes('pabell');
   const isBreakfast =
     t.includes('desayun') || t.includes('mañana') || t.includes('cafe') || t.includes('café');
   const isMexican =
@@ -29,7 +47,91 @@ function generateSmartFallbackItems(
 
   let pool: ItemTemplate[] = [];
 
-  if (isBreakfast) {
+  if (isCriollo) {
+    // Authentic Venezuelan / Colombian / Latin Criollo food
+    pool = [
+      {
+        nombre: 'Arepas de Maíz Calientes & Mantequilla',
+        cantidadEspecifica: 'Paquete de 10 arepas precocidas o recién hechas + 1 pote mantequilla/nata',
+        categoria: 'Básicos',
+        costoEstimado: '$6 - $8',
+        subItems: [
+          { nombre: 'Arepas de maíz blanco recién asadas', cantidadEspecifica: '10 unidades', categoria: 'Básicos' },
+          { nombre: 'Mantequilla o Nata criolla', cantidadEspecifica: '1 pote 250g', categoria: 'Complementos' },
+        ],
+      },
+      {
+        nombre: 'Queso Blanco Llanero / Costeño Rallado',
+        cantidadEspecifica: '1 bolsa de 500g de queso blanco fresco rallado',
+        categoria: 'Rellenos',
+        costoEstimado: '$6 - $8',
+      },
+      {
+        nombre: 'Carne Mechada Guisada Criolla',
+        cantidadEspecifica: '1 recipiente térmico con 600g de carne jugosa desmechada',
+        categoria: 'Plato Fuerte',
+        costoEstimado: '$9 - $12',
+      },
+      {
+        nombre: 'Huevos Pericos Criollos (Tomate y Cebolla)',
+        cantidadEspecifica: 'Bandeja térmica con 10-12 huevos revueltos con sofrito criollo',
+        categoria: 'Caliente',
+        costoEstimado: '$6 - $8',
+      },
+      {
+        nombre: 'Caraotas / Frijoles Negros Refritos con Queso',
+        cantidadEspecifica: '1 pote de 800g listo para untar con queso blanco por encima',
+        categoria: 'Acompañamiento',
+        costoEstimado: '$5 - $7',
+      },
+      {
+        nombre: 'Termo de Café con Leche & Guayoyo',
+        cantidadEspecifica: '1 termo de 2L recién colado + sobres de azúcar/edulcorante',
+        categoria: 'Bebidas',
+        costoEstimado: '$6 - $8',
+      },
+      {
+        nombre: 'Jugo Natural de Papelón con Limón o Maracuyá',
+        cantidadEspecifica: '2 botellas de 1.5L bien heladas',
+        categoria: 'Bebidas',
+        costoEstimado: '$5 - $7',
+      },
+      {
+        nombre: 'Docena de Tequeños con Salsa Tártara',
+        cantidadEspecifica: 'Bandeja de 12 tequeños de queso fritos y crujientes',
+        categoria: 'Salado',
+        costoEstimado: '$8 - $10',
+        subItems: [
+          { nombre: 'Tequeños de queso fritos', cantidadEspecifica: '12 unidades doradas', categoria: 'Salado' },
+          { nombre: 'Salsa tártara o guasacaca', cantidadEspecifica: '1 envase mediano dip', categoria: 'Salsas' },
+        ],
+      },
+      {
+        nombre: 'Tajadas de Plátano Maduro con Queso',
+        cantidadEspecifica: 'Bandeja con 15-20 tajadas doradas y queso rallado',
+        categoria: 'Acompañamiento',
+        costoEstimado: '$5 - $7',
+      },
+      {
+        nombre: 'Fruta Tropical Fresca (Papaya, Melón y Piña)',
+        cantidadEspecifica: 'Bowl grande de 1.5 kg surtido con frutas picadas',
+        categoria: 'Frutas',
+        costoEstimado: '$5 - $7',
+      },
+      {
+        nombre: 'Platos Hondos, Servilletas y Vasos Criollos',
+        cantidadEspecifica: 'Paquete de 30 platos resistentes + 60 servilletas + 30 vasos',
+        categoria: 'Desechables',
+        costoEstimado: '$5 - $6',
+      },
+      {
+        nombre: 'Dulce de Lechoza o Golfeados con Queso',
+        cantidadEspecifica: 'Bandeja con 6 golfeados medianos o frasco de dulce casero',
+        categoria: 'Postre',
+        costoEstimado: '$7 - $9',
+      },
+    ];
+  } else if (isBreakfast) {
     pool = [
       {
         nombre: 'Café de grano premium & Leche',
@@ -291,7 +393,7 @@ function generateSmartFallbackItems(
       nombre: template.nombre + nameSuffix,
       cantidadEspecifica: template.cantidadEspecifica,
       categoria: template.categoria,
-      costoEstimado: template.costoEstimado || '$6 - $9',
+      subItems: template.subItems ? template.subItems.map((s) => ({ ...s })) : undefined,
     });
   }
   return items;
@@ -350,17 +452,21 @@ export default async function handler(req: any, res: any) {
           },
         });
 
-        const prompt = `Actúa como organizador experto de eventos corporativos de oficina.
-Necesito exactamente ${count} ítems individuales para un compartir de comida titulado: "${safeTitle}".
+        const prompt = `Actúa como organizador experto de eventos gastronómicos y dinámicas de oficina con conocimiento culinario profundo de gastronomías mundiales y regionales (latinoamericana, venezolana, colombiana, mexicana, española, asiática, criolla, etc.).
+
+Necesito exactamente ${count} tickets/aportes individuales para un compartir de comida titulado: "${safeTitle}".
 Detalles o temática: "${safeDesc}".
 Presupuesto / Directriz de equidad: "${safeBudget}".
 
-REGLAS CRÍTICAS:
-1. Debes devolver EXACTAMENTE ${count} ítems individuales en la lista (ni uno más, ni uno menos).
-2. Cada ítem debe representar la contribución que llevará 1 persona específica.
-3. El costo de cada ítem debe ser muy equilibrado y justo para que nadie gaste demasiado más que otro.
-4. Debe haber una distribución armónica: platos principales/salados, bebidas, acompañamientos/snacks, postres/dulces y desechables/vajilla si aplica.
-5. "cantidadEspecifica" debe ser clara y precisa para compras en supermercado (ej: "2 botellas de 1.5L", "1 bandeja de 12 empanadas", "1 paquete de 30 platos y 50 servilletas").
+REGLAS CRÍTICAS DE CALIDAD CULINARIA:
+1. AUTENTICIDAD CULTURAL Y REGIONAL:
+   - Si el título o temática menciona "criollo" (ej: "desayuno criollo", "almuerzo criollo"), genera comida 100% auténtica criolla (arepas de maíz, queso blanco/llanero, carne mechada, huevos pericos, caraotas, café con leche, papelón con limón, tequeños, tajadas, etc.). ¡Nunca devuelvas un desayuno continental genérico si se especificó una temática o gastronomía particular!
+   - Aplica este mismo principio para cualquier temática (tacos, asado, tapas, sushi, comida saludable, etc.).
+2. SOPORTE DE MÚLTIPLES PRODUCTOS POR TICKET:
+   - Si la dinámica contempla que cada persona traiga más de una cosa (o para eventos con pocas personas donde se necesitan muchas provisiones), en cada ítem incluye un campo "subItems" con la lista detallada de los productos individuales que componen ese aporte (ej: "Bebidas y Vasos" -> subItem 1: 2 botellas de jugo 1.5L; subItem 2: Paquete de 30 vasos).
+3. EXACTITUD NUMÉRICA: Debes devolver EXACTAMENTE ${count} tickets en la lista (ni uno más, ni uno menos).
+4. EQUIDAD EN COSTOS: El valor total de cada ticket debe ser similar y accesible según la directriz.
+5. ESPECIFICIDAD DE SUPERMERCADO: "cantidadEspecifica" debe ser clara y precisa para compras en supermercado (ej: "2 botellas de 1.5L bien frías", "1 bandeja de 12 empanadas recién horneadas").
 6. "costoEstimado" debe ser un rango realista en formato texto (ej: "$5 - $8", "$6 - $9").`;
 
         const response = await aiClient.models.generateContent({
@@ -368,7 +474,7 @@ REGLAS CRÍTICAS:
           contents: prompt,
           config: {
             systemInstruction:
-              'Eres OfficeDrop AI. Generas listas de comida para dinámicas de oficina donde cada participante aporta algo justo, realista y delicioso.',
+              'Eres OfficeDrop AI. Generas listas de comida para dinámicas de oficina donde cada participante aporta algo justo, realista y delicioso, respetando con precisión la cultura gastronómica solicitada.',
             responseMimeType: 'application/json',
             responseSchema: {
               type: Type.ARRAY,
@@ -376,18 +482,39 @@ REGLAS CRÍTICAS:
                 type: Type.OBJECT,
                 properties: {
                   id: { type: Type.STRING, description: 'Identificador único como item-1, item-2' },
-                  nombre: { type: Type.STRING, description: 'Nombre descriptivo del alimento o aporte' },
+                  nombre: {
+                    type: Type.STRING,
+                    description: 'Nombre descriptivo del alimento, aporte o combo',
+                  },
                   cantidadEspecifica: {
                     type: Type.STRING,
                     description: 'Cantidad exacta a comprar (ej: 2 Litros de jugo bien frío)',
                   },
                   categoria: {
                     type: Type.STRING,
-                    description: 'Categoría como Bebidas, Salado, Postre, Snacks, Desechables',
+                    description: 'Categoría como Bebidas, Salado, Postre, Snacks, Desechables, Combo',
                   },
                   costoEstimado: {
                     type: Type.STRING,
                     description: 'Rango de costo estimado equilibrado (ej: $5 - $8)',
+                  },
+                  subItems: {
+                    type: Type.ARRAY,
+                    description:
+                      'Lista detallada de productos individuales si este ticket incluye más de un producto',
+                    items: {
+                      type: Type.OBJECT,
+                      properties: {
+                        nombre: { type: Type.STRING, description: 'Nombre del producto' },
+                        cantidadEspecifica: {
+                          type: Type.STRING,
+                          description: 'Cantidad específica a comprar',
+                        },
+                        categoria: { type: Type.STRING, description: 'Categoría' },
+                        costoEstimado: { type: Type.STRING, description: 'Costo estimado' },
+                      },
+                      required: ['nombre', 'cantidadEspecifica'],
+                    },
                   },
                 },
                 required: ['id', 'nombre', 'cantidadEspecifica', 'categoria', 'costoEstimado'],
@@ -406,6 +533,17 @@ REGLAS CRÍTICAS:
               cantidadEspecifica: String(it.cantidadEspecifica || '1 porción adecuada').trim(),
               categoria: String(it.categoria || 'Varios').trim(),
               costoEstimado: String(it.costoEstimado || '$5 - $8').trim(),
+              subItems:
+                Array.isArray(it.subItems) && it.subItems.length > 0
+                  ? it.subItems
+                      .map((s: any) => ({
+                        nombre: String(s.nombre || '').trim(),
+                        cantidadEspecifica: String(s.cantidadEspecifica || '').trim(),
+                        categoria: s.categoria ? String(s.categoria).trim() : undefined,
+                        costoEstimado: s.costoEstimado ? String(s.costoEstimado).trim() : undefined,
+                      }))
+                      .filter((s: any) => Boolean(s.nombre))
+                  : undefined,
             }));
             return sendJson(200, {
               success: true,

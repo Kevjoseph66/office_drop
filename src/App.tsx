@@ -469,7 +469,7 @@ export default function App() {
         ) : (
           <ParticipantMobileView
             event={currentEvent}
-            currentUserName={activeUser?.name || 'Tú'}
+            currentUserName={activeUser?.name && activeUser.name !== 'Tú' ? activeUser.name : ''}
             onUpdateEvent={handleUpdateEvent}
             onUserNameChange={(newName) => {
               setActiveUser((prev) =>

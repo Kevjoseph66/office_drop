@@ -325,7 +325,7 @@ export async function seedInitialEventsToFirestore(): Promise<void> {
   try {
     const potluckRef = doc(db, EVENTS_COLLECTION, INITIAL_POTLUCK_EVENT.id);
     const potluckSnap = await getDoc(potluckRef);
-    if (!potluckSnap.exists()) {
+    if (!potluckSnap.exists() || !potluckSnap.data()?.items || potluckSnap.data()?.items?.length === 0) {
       await setDoc(potluckRef, cleanForFirestore(INITIAL_POTLUCK_EVENT));
       console.log('Seeded INITIAL_POTLUCK_EVENT to Firestore');
     }

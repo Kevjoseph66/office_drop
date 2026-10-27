@@ -1,5 +1,12 @@
 export type EventType = 'potluck' | 'raffle';
 
+export interface PotluckSubItem {
+  nombre: string;
+  cantidadEspecifica: string;
+  categoria?: string;
+  costoEstimado?: string;
+}
+
 export interface PotluckItem {
   id: string;
   nombre: string;
@@ -9,6 +16,7 @@ export interface PotluckItem {
   assignedTo?: string | null;
   assignedAt?: string | null;
   assignedDeviceId?: string | null;
+  subItems?: PotluckSubItem[];
 }
 
 export interface RaffleTicket {

@@ -54,3 +54,29 @@ test('formatRaffleShareText formats WhatsApp / clipboard text for raffle ticket'
   assert.ok(text.includes('#007'));
   assert.ok(text.includes('https://officedrop.app/?eventId=demo-raffle'));
 });
+
+test('formatPotluckShareText formats multiple bundled subItems in WhatsApp text', () => {
+  const details: PotluckTicketDetails = {
+    eventTitle: 'Desayuno Criollo',
+    participantName: 'Carlos',
+    item: {
+      id: 'item-combo-1',
+      nombre: 'Combo Arepas & Nata',
+      cantidadEspecifica: '10 arepas + 1 pote nata',
+      categoria: 'Combo',
+      costoEstimado: '$7 - $9',
+      assignedTo: 'Carlos',
+      subItems: [
+        { nombre: 'Arepas de maíz recién asadas', cantidadEspecifica: '10 unidades', categoria: 'Básicos' },
+        { nombre: 'Mantequilla o Nata criolla', cantidadEspecifica: '1 pote 250g', categoria: 'Complementos' },
+      ],
+    },
+  };
+
+  const text = formatPotluckShareText(details);
+  assert.ok(text.includes('Carlos'));
+  assert.ok(text.includes('combo de 2 productos'));
+  assert.ok(text.includes('Arepas de maíz recién asadas'));
+  assert.ok(text.includes('Mantequilla o Nata criolla'));
+  assert.ok(text.includes('$7 - $9'));
+});
