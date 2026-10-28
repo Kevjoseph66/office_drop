@@ -62,14 +62,18 @@ El corazón de OfficeDrop es su modelo de datos `PotluckItem`:
 
 ```typescript
 export interface PotluckItem {
-  id: string;                    // Identificador único (ej: 'item-1')
-  nombre: string;                // Nombre del producto (ej: 'Café de Especialidad')
-  cantidadEspecifica: string;    // Cantidad exacta a comprar (ej: '1 bolsa de 500g')
-  categoria: string;             // 'Bebidas' | 'Salado' | 'Postre' | 'Snacks' | 'Desechables'
-  costoEstimado: string;         // Rango monetario (ej: '$5 - $8')
-  assignedTo?: string | null;    // Nombre del participante que lo tomó
-  assignedAt?: string | null;    // Timestamp ISO de la asignación
-  assignedDeviceId?: string | null; // ID único del dispositivo móvil (anti-trampa)
+  id: string;                         // Identificador único (ej: 'item-1')
+  nombre: string;                     // Nombre del producto o combo (ej: 'Combo Tacos y Salsa')
+  cantidadEspecifica: string;         // Cantidad exacta a comprar (ej: '2 paquetes')
+  categoria: string;                  // 'Bebidas' | 'Salado' | 'Postre' | 'Snacks' | 'Desechables'
+  costoEstimado: string;              // Rango monetario (ej: '$5 - $8')
+  assignedTo?: string | null;         // Nombre del participante que lo tomó
+  assignedPhoneOrEmail?: string | null; // Teléfono o correo del participante (anti-trampa único)
+  assignedAt?: string | null;         // Timestamp ISO de la asignación
+  assignedDeviceId?: string | null;   // ID único del dispositivo móvil (anti-trampa)
+  subItems?: PotluckSubItem[];        // Productos agrupados en un solo ticket (soporte combo)
+  purchased?: boolean;                // Booleano indicando si ya compró los productos
+  purchasedAt?: string | null;        // Timestamp ISO de la confirmación de compra
 }
 ```
 
@@ -173,31 +177,39 @@ El organizador cuenta con control total sobre los productos:
 
 ---
 
-## 4. Mecanismo de Asignación Móvil: Flujo en 3 Pasos y Anti-Trampa
+## 4. Mecanismo de Asignación Móvil: Flujo en 3 Pasos, Tickets y Anti-Trampa con Teléfono/Correo
 
 Cuando un participante escanea el código QR o abre el enlace en su teléfono móvil:
 
-1. **PASO 1 — Identificación del Jugador (Primero el Nombre):**
-   - El participante encuentra una pantalla retro arcade que le solicita: *¿Cómo te llamas?*
-   - Ingresa su nombre o apodo único (ej: *"Laura"*, *"Carlos"*).
-   - El sistema almacena su nombre localmente para ese evento.
-   - **Solución al problema multi-dispositivo:** Los nuevos dispositivos nunca reciben por defecto el nombre `"Tú"`, evitando que varios teléfonos colisionen con la misma asignación.
+1. **Barra Superior Limpia (Sin Inputs Duplicados):**
+   - La cabecera móvil muestra el estado de jugador en formato badge limpio: `👾 PLAYER: [NOMBRE] [CAMBIAR]`.
+   - Se eliminó el campo de entrada superior redundante para evitar confusiones en pantallas pequeñas de smartphones.
 
-2. **PASO 2 — Caja Sorpresa Cerrada (Listo para Jugar):**
-   - Una vez confirmado el nombre, la pantalla saluda al participante: *¡Hola [Nombre]! Toca el cofre para descubrir qué comida llevarás.*
-   - Se muestra un cofre o regalo pixel-art animado palpitando con partículas de 8 bits.
-   - Botón interactivo de gran tamaño: `[ 🎁 ABRIR REGALO Y DESCUBRIR ]`.
+2. **PASO 1 — Identificación del Jugador (Nombre y Teléfono/Correo Único):**
+   - El participante encuentra una pantalla retro arcade que le solicita:
+     - **Nombre o Apodo:** (ej: *"Laura"*, *"Carlos"*).
+     - **Teléfono o Correo Electrónico:** (ej: `+58 412 123 4567` o `laura@empresa.com`).
+   - **Garantía Anti-Trampa y Anti-Duplicados:**
+     - Evita que un mismo usuario reclame múltiples ítems usando modo incógnito, borrando caché o usando otro navegador en el mismo u otro equipo.
+     - Si alguien intenta registrarse con un nombre ligeramente distinto pero el mismo número/correo, el sistema detecta la identidad y le restaura su ticket asignado en lugar de tomar otro ítem del inventario.
+     - Preserva los datos de contacto del participante para notificaciones futuras o recordatorios por WhatsApp.
+   - Botón interactivo: `[ 🎟️ CONTINUAR AL TICKET ]`.
 
-3. **PASO 3 — Apertura y Transacción Atómica en Firestore (`runTransaction`):**
+3. **PASO 2 — Ticket de Misión Misterioso (Listo para Obtener):**
+   - Una vez registrado, la pantalla saluda al participante: *¡Hola [Nombre]! Toca el ticket o presiona el botón para descubrir qué comida o bebida te tocará traer.*
+   - Se muestra un ticket pixel-art con ícono de ticket (`🎟️`) y partículas de 8 bits.
+   - Botón interactivo de gran tamaño: `[ 🎟️ ¡OBTENER TICKET Y DESCUBRIR! ]`.
+
+4. **PASO 3 — Asignación Atómica en Firestore (`runTransaction`) y Pase Oficial:**
    - Al pulsar el botón, se reproduce un sonido arcade y se ejecuta la transacción ACID en Firestore.
-   - Se valida en tiempo real que ningún otro participante haya tomado ese ítem durante el milisegundo de animación.
-   - Se asigna el ítem o combo al participante con su nombre y `deviceId` único.
-   - Se dispara una celebración con confeti en pantalla y se muestra el pase oficial con los productos a traer.
+   - **Alta Concurrencia:** Concurrencia optimista (OCC) con reintentos automáticos y jitter. Si 30 personas escanean el QR al mismo milisegundo, cada una recibe un ítem distinto sin ninguna colisión ni sobre-escritura.
+   - Se asigna el ítem o combo al participante con su nombre, teléfono/correo y `deviceId`.
+   - Se dispara una celebración con confeti en pantalla (`canvas-confetti`) y se muestra el pase oficial con los productos a traer.
 
-4. **Sistema Anti-Trampa (Anti-Cheat Hardened):**
-   - Cada dispositivo móvil genera y almacena un `deviceId` único en su `localStorage`.
-   - Si un participante intenta volver a girar la ruleta para cambiar su plato por uno más fácil, el sistema lo bloquea y le devuelve su misión original.
-   - Solo el Administrador con PIN maestro puede reasignar un plato desde el panel de control.
+5. **Confirmación de Compra en Base de Datos (Modal de Comprobante):**
+   - En la tarjeta del ticket, el participante tiene el botón interactivo: `[ 🛒 YA LO COMPRÉ / MARCAR COMPRADO ]`.
+   - Abre un modal de confirmación arcade con sonido retro y persiste el estado `purchased: true` con `purchasedAt` en Firestore y caché local.
+   - El panel de control del organizador refleja en vivo el porcentaje de compras completadas (`3/10 comprados - 30%`).
 
 ---
 

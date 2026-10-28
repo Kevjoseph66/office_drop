@@ -83,9 +83,11 @@ export function subscribeToFirestoreEvent(
 export async function assignPotluckItemWithTransaction(
   eventId: string,
   userName: string,
-  deviceId?: string
+  deviceId?: string,
+  phoneOrEmail?: string
 ): Promise<{ item: PotluckItem | null; isExisting: boolean; error?: string }> {
   const cleanName = userName.trim();
+  const cleanContact = phoneOrEmail ? phoneOrEmail.trim() : null;
   if (!cleanName) {
     return { item: null, isExisting: false, error: 'El nombre es obligatorio.' };
   }
@@ -102,10 +104,11 @@ export async function assignPotluckItemWithTransaction(
       const eventData = docSnap.data() as OfficeEvent;
       const items: PotluckItem[] = eventData.items || [];
 
-      // 1. Anti-Cheat: Check if this user name OR this phone device ID already has an item assigned
+      // 1. Anti-Cheat: Check if this user name, phone/email, OR device ID already has an item assigned
       const existing = items.find(
         (it) =>
           (it.assignedTo && it.assignedTo.trim().toLowerCase() === cleanName.toLowerCase()) ||
+          (Boolean(cleanContact) && Boolean(it.assignedPhoneOrEmail) && it.assignedPhoneOrEmail?.trim().toLowerCase() === cleanContact!.toLowerCase()) ||
           (Boolean(deviceId) && Boolean(it.assignedDeviceId) && it.assignedDeviceId === deviceId)
       );
       if (existing) {
@@ -132,6 +135,7 @@ export async function assignPotluckItemWithTransaction(
           return {
             ...it,
             assignedTo: cleanName,
+            assignedPhoneOrEmail: cleanContact || null,
             assignedDeviceId: deviceId || null,
             assignedAt: now,
           };
@@ -143,7 +147,13 @@ export async function assignPotluckItemWithTransaction(
       transaction.update(docRef, { items: cleanForFirestore(updatedItems) });
 
       return {
-        item: { ...chosenItem, assignedTo: cleanName, assignedDeviceId: deviceId || null, assignedAt: now },
+        item: {
+          ...chosenItem,
+          assignedTo: cleanName,
+          assignedPhoneOrEmail: cleanContact || null,
+          assignedDeviceId: deviceId || null,
+          assignedAt: now,
+        },
         isExisting: false,
       };
     });
@@ -157,14 +167,16 @@ export async function assignPotluckItemWithTransaction(
 
 /**
  * Atomic Firestore transaction to register a raffle ticket.
- * Increments ticket numbers safely without collisions and checks device ID.
+ * Increments ticket numbers safely without collisions and checks device ID & contact.
  */
 export async function registerRaffleTicketWithTransaction(
   eventId: string,
   userName: string,
-  deviceId?: string
+  deviceId?: string,
+  phoneOrEmail?: string
 ): Promise<{ ticket: RaffleTicket | null; isExisting: boolean; error?: string }> {
   const cleanName = userName.trim();
+  const cleanContact = phoneOrEmail ? phoneOrEmail.trim() : null;
   if (!cleanName) {
     return { ticket: null, isExisting: false, error: 'El nombre es obligatorio.' };
   }
@@ -181,10 +193,11 @@ export async function registerRaffleTicketWithTransaction(
       const eventData = docSnap.data() as OfficeEvent;
       const tickets: RaffleTicket[] = eventData.tickets || [];
 
-      // Anti-Cheat: Check if user name OR phone device ID already has a ticket
+      // Anti-Cheat: Check if user name, phone/email, OR phone device ID already has a ticket
       const existing = tickets.find(
         (t) =>
           t.userName.trim().toLowerCase() === cleanName.toLowerCase() ||
+          (Boolean(cleanContact) && Boolean(t.phoneOrEmail) && t.phoneOrEmail?.trim().toLowerCase() === cleanContact!.toLowerCase()) ||
           (Boolean(deviceId) && Boolean(t.deviceId) && t.deviceId === deviceId)
       );
       if (existing) {
@@ -196,6 +209,7 @@ export async function registerRaffleTicketWithTransaction(
       const newTicket: RaffleTicket = {
         ticketNumber: nextNumber,
         userName: cleanName,
+        phoneOrEmail: cleanContact || null,
         deviceId: deviceId || null,
         joinedAt: new Date().toISOString(),
       };

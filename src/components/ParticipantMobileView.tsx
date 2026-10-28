@@ -74,11 +74,16 @@ export const ParticipantMobileView: React.FC<ParticipantMobileViewProps> = ({
   const [copyFeedback, setCopyFeedback] = useState<'potluck' | 'raffle' | null>(null);
   const [isConfirmPurchaseModalOpen, setIsConfirmPurchaseModalOpen] = useState(false);
   const [isUpdatingPurchase, setIsUpdatingPurchase] = useState(false);
+  const [inputContact, setInputContact] = useState('');
 
-  // Restore participant name from localStorage for this specific eventId
+  // Restore participant name and unique contact from localStorage for this specific eventId
   React.useEffect(() => {
     try {
       const savedName = localStorage.getItem(`officedrop_participant_${event.id}`);
+      const savedContact = localStorage.getItem(`officedrop_contact_${event.id}`);
+      if (savedContact && savedContact.trim()) {
+        setInputContact(savedContact.trim());
+      }
       if (savedName && savedName.trim() && savedName.trim() !== 'Tú') {
         onUserNameChange(savedName.trim());
         setInputName(savedName.trim());
@@ -101,12 +106,14 @@ export const ParticipantMobileView: React.FC<ParticipantMobileViewProps> = ({
       ? currentUserName.trim().toLowerCase()
       : null;
 
+  const cleanContact = inputContact.trim().toLowerCase();
+
   const assignedItem =
     event.type === 'potluck' && validUserName
       ? event.items.find(
           (it) =>
-            it.assignedTo &&
-            it.assignedTo.trim().toLowerCase() === validUserName
+            (it.assignedTo && it.assignedTo.trim().toLowerCase() === validUserName) ||
+            (Boolean(cleanContact) && Boolean(it.assignedPhoneOrEmail) && it.assignedPhoneOrEmail?.trim().toLowerCase() === cleanContact)
         ) || null
       : null;
 
@@ -114,8 +121,8 @@ export const ParticipantMobileView: React.FC<ParticipantMobileViewProps> = ({
     event.type === 'raffle' && validUserName
       ? event.tickets.find(
           (t) =>
-            t.userName &&
-            t.userName.trim().toLowerCase() === validUserName
+            (t.userName && t.userName.trim().toLowerCase() === validUserName) ||
+            (Boolean(cleanContact) && Boolean(t.phoneOrEmail) && t.phoneOrEmail?.trim().toLowerCase() === cleanContact)
         ) || null
       : null;
 
@@ -127,15 +134,23 @@ export const ParticipantMobileView: React.FC<ParticipantMobileViewProps> = ({
 
   const handleSaveName = (e: React.FormEvent) => {
     e.preventDefault();
-    if (inputName.trim()) {
-      const trimmed = inputName.trim();
-      onUserNameChange(trimmed);
-      try {
-        localStorage.setItem(`officedrop_participant_${event.id}`, trimmed);
-      } catch {}
-      setIsEditingName(false);
-      setErrorMsg(null);
+    if (!inputName.trim()) {
+      setErrorMsg('Por favor ingresa tu nombre de jugador.');
+      return;
     }
+    if (!inputContact.trim()) {
+      setErrorMsg('Por favor ingresa tu teléfono o correo para verificar tu ticket único.');
+      return;
+    }
+    const trimmedName = inputName.trim();
+    const trimmedContact = inputContact.trim();
+    onUserNameChange(trimmedName);
+    try {
+      localStorage.setItem(`officedrop_participant_${event.id}`, trimmedName);
+      localStorage.setItem(`officedrop_contact_${event.id}`, trimmedContact);
+    } catch {}
+    setIsEditingName(false);
+    setErrorMsg(null);
   };
 
   const handleDiscoverPotluckItem = async () => {
@@ -170,7 +185,12 @@ export const ParticipantMobileView: React.FC<ParticipantMobileViewProps> = ({
       } catch {}
 
       // 2. Call safe Firestore atomic transaction with deviceId and concurrency-aware timeout
-      const transactionPromise = assignPotluckItemWithTransaction(event.id, currentUserName, deviceId);
+      const transactionPromise = assignPotluckItemWithTransaction(
+        event.id,
+        currentUserName,
+        deviceId,
+        inputContact.trim()
+      );
       const timeoutPromise = new Promise<{ item: null; isExisting: false; error: string }>((_, reject) =>
         setTimeout(() => reject(new Error('TIMEOUT_CONCURRENCY')), 8500)
       );
@@ -201,7 +221,12 @@ export const ParticipantMobileView: React.FC<ParticipantMobileViewProps> = ({
     } catch (err: any) {
       console.warn('Firestore transaction slow or failed in Safari/network, using local fallback:', err);
       // Resilient fallback to local logic if Firestore fails or times out in Safari
-      const fallbackResult = assignRandomPotluckItem(event.items, currentUserName, deviceId);
+      const fallbackResult = assignRandomPotluckItem(
+        event.items,
+        currentUserName,
+        deviceId,
+        inputContact.trim()
+      );
       if (fallbackResult.error) {
         setErrorMsg(fallbackResult.error);
         return;
@@ -297,7 +322,12 @@ export const ParticipantMobileView: React.FC<ParticipantMobileViewProps> = ({
         localStorage.setItem(`officedrop_participant_${event.id}`, currentUserName.trim());
       } catch {}
 
-      const result = await registerRaffleTicketWithTransaction(event.id, currentUserName, deviceId);
+      const result = await registerRaffleTicketWithTransaction(
+        event.id,
+        currentUserName,
+        deviceId,
+        inputContact.trim()
+      );
       if (result.error) {
         setErrorMsg(result.error);
         return;
@@ -319,7 +349,12 @@ export const ParticipantMobileView: React.FC<ParticipantMobileViewProps> = ({
       } catch {}
     } catch (err: any) {
       console.error(err);
-      const fallback = registerRaffleTicket(event.tickets, currentUserName, deviceId);
+      const fallback = registerRaffleTicket(
+        event.tickets,
+        currentUserName,
+        deviceId,
+        inputContact.trim()
+      );
       if (fallback.error) {
         setErrorMsg(fallback.error);
         return;
@@ -468,46 +503,25 @@ export const ParticipantMobileView: React.FC<ParticipantMobileViewProps> = ({
 
         {/* Player Tag Identification Bar */}
         <div className="bg-[#161a2c] border-b-2 border-[#252c44] px-4 py-2.5 flex items-center justify-between gap-2">
-          {isEditingName ? (
-            <form onSubmit={handleSaveName} className="flex items-center gap-2 w-full">
-              <input
-                type="text"
-                value={inputName}
-                onChange={(e) => setInputName(e.target.value)}
-                placeholder="TU NOMBRE DE JUGADOR..."
-                autoFocus
-                className="w-full px-2.5 py-1 text-xs bg-black border-2 border-cyan-400 text-cyan-300 font-pixel uppercase focus:outline-none"
-              />
-              <button
-                type="submit"
-                className="px-3 py-1 text-xs font-pixel font-bold bg-cyan-500 text-slate-950 hover:bg-cyan-400 shadow-[2px_2px_0px_#000]"
-              >
-                SET
-              </button>
-            </form>
-          ) : (
-            <>
-              <div className="flex items-center gap-2 font-pixel">
-                <span className="text-sm">👾</span>
-                <div>
-                  <div className="text-[10px] text-slate-400">PLAYER:</div>
-                  <div className="text-xs font-bold text-cyan-300 tracking-wider">
-                    {validUserName ? currentUserName : 'SIN REGISTRAR'}
-                  </div>
-                </div>
+          <div className="flex items-center gap-2 font-pixel">
+            <span className="text-sm">👾</span>
+            <div>
+              <div className="text-[10px] text-slate-400">PLAYER:</div>
+              <div className="text-xs font-bold text-cyan-300 tracking-wider">
+                {validUserName ? currentUserName : 'SIN REGISTRAR'}
               </div>
-              {validUserName && !assignedItem && (
-                <button
-                  onClick={() => {
-                    setInputName(currentUserName);
-                    setIsEditingName(true);
-                  }}
-                  className="text-[10px] font-pixel text-slate-400 hover:text-cyan-300 underline"
-                >
-                  [CAMBIAR]
-                </button>
-              )}
-            </>
+            </div>
+          </div>
+          {validUserName && !assignedItem && (
+            <button
+              onClick={() => {
+                setInputName(currentUserName);
+                setIsEditingName(true);
+              }}
+              className="text-[10px] font-pixel text-slate-400 hover:text-cyan-300 underline"
+            >
+              [CAMBIAR]
+            </button>
           )}
         </div>
 
@@ -524,8 +538,8 @@ export const ParticipantMobileView: React.FC<ParticipantMobileViewProps> = ({
           {/* ================= STAGE 1: POTLUCK QUEST ================= */}
           {event.type === 'potluck' && (
             <div className="space-y-4">
-              {!validUserName ? (
-                /* STEP 1: Enter Player Name First */
+              {!validUserName || isEditingName ? (
+                /* STEP 1: Enter Player Name & Unique Phone or Email */
                 <div className="p-5 sm:p-6 bg-[#0f1424] border-4 border-cyan-400 shadow-[6px_6px_0px_#000] text-center space-y-4 my-2 crt-scanlines">
                   <div className="w-16 h-16 mx-auto bg-black border-2 border-cyan-400 flex items-center justify-center text-3xl shadow-[0_0_20px_rgba(6,182,212,0.4)] animate-pulse">
                     👾
@@ -538,32 +552,53 @@ export const ParticipantMobileView: React.FC<ParticipantMobileViewProps> = ({
                       ¿CÓMO TE LLAMAS?
                     </h2>
                     <p className="text-xs text-slate-300 font-retro mt-1 max-w-xs mx-auto">
-                      Ingresa tu nombre o apodo para que tus compañeros sepan qué llevarás al compartir.
+                      Ingresa tu nombre y tu teléfono o correo para verificar tu ticket único y evitar duplicados.
                     </p>
                   </div>
 
-                  <form onSubmit={handleSaveName} className="space-y-3 pt-1">
-                    <input
-                      type="text"
-                      value={inputName}
-                      onChange={(e) => setInputName(e.target.value)}
-                      placeholder="ESCRIBE TU NOMBRE..."
-                      autoFocus
-                      maxLength={30}
-                      className="w-full px-3 py-2.5 text-center text-xs bg-black border-2 border-cyan-400 text-cyan-300 font-pixel uppercase focus:outline-none focus:border-emerald-400 shadow-inner"
-                    />
+                  <form onSubmit={handleSaveName} className="space-y-3 pt-1 text-left">
+                    <div>
+                      <label className="block text-[10px] font-pixel text-slate-400 mb-1">
+                        NOMBRE O APODO:
+                      </label>
+                      <input
+                        type="text"
+                        value={inputName}
+                        onChange={(e) => setInputName(e.target.value)}
+                        placeholder="ESCRIBE TU NOMBRE..."
+                        autoFocus
+                        maxLength={30}
+                        className="w-full px-3 py-2.5 text-xs bg-black border-2 border-cyan-400 text-cyan-300 font-pixel uppercase focus:outline-none focus:border-emerald-400 shadow-inner"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-pixel text-slate-400 mb-1">
+                        TELÉFONO O CORREO (TICKET ÚNICO):
+                      </label>
+                      <input
+                        type="text"
+                        value={inputContact}
+                        onChange={(e) => setInputContact(e.target.value)}
+                        placeholder="+58 412... O CORREO..."
+                        maxLength={50}
+                        className="w-full px-3 py-2.5 text-xs bg-black border-2 border-cyan-400 text-cyan-300 font-pixel focus:outline-none focus:border-emerald-400 shadow-inner"
+                      />
+                      <p className="text-[10px] text-slate-400 font-retro mt-1">
+                        * Evita duplicados o trampas desde el mismo teléfono o ventanas privadas.
+                      </p>
+                    </div>
                     <button
                       type="submit"
-                      disabled={!inputName.trim()}
+                      disabled={!inputName.trim() || !inputContact.trim()}
                       className="pixel-btn-green w-full py-3 text-xs font-arcade font-bold flex items-center justify-center gap-2 tracking-wider shadow-[3px_3px_0px_#000] disabled:opacity-50"
                     >
-                      <span>CONTINUAR AL COFRE</span>
-                      <Sparkles className="w-4 h-4" />
+                      <Ticket className="w-4 h-4" />
+                      <span>CONTINUAR AL TICKET</span>
                     </button>
                   </form>
                 </div>
               ) : !assignedItem ? (
-                /* STEP 2: Player Name is confirmed. Mystery Chest is closed and ready to open! */
+                /* STEP 2: Player Name is confirmed. Mystery Ticket is ready to obtain! */
                 event.items.length === 0 ? (
                   <div className="text-center py-8 px-4 bg-[#131625] border-2 border-dashed border-amber-500/50 my-4 space-y-3">
                     <div className="w-12 h-12 mx-auto bg-amber-500/20 border-2 border-amber-500/60 flex items-center justify-center text-2xl shadow-[0_0_15px_rgba(245,158,11,0.2)]">
@@ -587,17 +622,17 @@ export const ParticipantMobileView: React.FC<ParticipantMobileViewProps> = ({
                   <div className="text-center py-4 space-y-2">
                     <div className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-pixel bg-cyan-950 text-cyan-300 border border-cyan-500/40">
                       <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                      PASO 2: ABRIR REGALO
+                      PASO 2: OBTENER TICKET
                     </div>
 
                     <h2 className="text-base sm:text-lg font-arcade text-white tracking-wide">
                       ¡HOLA, {currentUserName}!
                     </h2>
                     <p className="text-xs text-slate-300 font-retro max-w-xs mx-auto">
-                      Toca el cofre secreto o presiona el botón para descubrir qué comida o bebida te tocará traer.
+                      Toca el ticket o presiona el botón para descubrir qué comida o bebida te tocará traer.
                     </p>
 
-                    {/* 8-Bit Pixel Mystery Chest Button */}
+                    {/* 8-Bit Pixel Mystery Ticket Button */}
                     <div className="my-5 relative flex justify-center">
                       <button
                         onClick={handleDiscoverPotluckItem}
@@ -607,12 +642,14 @@ export const ParticipantMobileView: React.FC<ParticipantMobileViewProps> = ({
                         }`}
                       >
                         <div className="w-16 h-16 bg-black/60 border-2 border-dashed border-amber-400 flex items-center justify-center mb-2 shadow-inner group-hover:scale-110 transition">
-                          <span className="text-3xl filter drop-shadow">
-                            {isOpeningBox ? '⚡' : '🎁'}
-                          </span>
+                          {isOpeningBox ? (
+                            <span className="text-3xl filter drop-shadow">⚡</span>
+                          ) : (
+                            <Ticket className="w-9 h-9 text-amber-400 drop-shadow" />
+                          )}
                         </div>
                         <span className="font-arcade text-[10px] text-amber-300 uppercase tracking-widest text-center mt-1">
-                          {isOpeningBox ? 'ABRIENDO...' : '► ABRIR REGALO ◄'}
+                          {isOpeningBox ? 'GENERANDO TICKET...' : '► OBTENER TICKET ◄'}
                         </span>
                         <span className="text-[10px] font-pixel text-cyan-300 mt-1">
                           {availableItemsCount} DISPONIBLES
@@ -630,8 +667,8 @@ export const ParticipantMobileView: React.FC<ParticipantMobileViewProps> = ({
                         disabled={isOpeningBox}
                         className="pixel-btn-cyan w-full py-3.5 text-xs font-arcade tracking-wider flex items-center justify-center gap-2 font-bold shadow-[4px_4px_0px_#000]"
                       >
-                        <Gift className="w-4 h-4" />
-                        <span>{isOpeningBox ? 'ABRIENDO COFRE...' : '¡ABRIR REGALO Y DESCUBRIR!'}</span>
+                        <Ticket className="w-4 h-4" />
+                        <span>{isOpeningBox ? 'GENERANDO TICKET...' : '¡OBTENER TICKET Y DESCUBRIR!'}</span>
                       </button>
                     )}
                   </div>
@@ -645,8 +682,13 @@ export const ParticipantMobileView: React.FC<ParticipantMobileViewProps> = ({
                       <span>★ MISIÓN ASIGNADA ★</span>
                     </div>
 
-                    <div className="text-[11px] font-pixel text-slate-400">
-                      AGENTE: {currentUserName}
+                    <div className="text-[11px] font-pixel text-slate-400 flex items-center justify-between">
+                      <span>AGENTE: {currentUserName}</span>
+                      {assignedItem.assignedPhoneOrEmail && (
+                        <span className="text-cyan-400 font-mono text-[10px]">
+                          📱 {assignedItem.assignedPhoneOrEmail}
+                        </span>
+                      )}
                     </div>
                     <div className="text-base sm:text-lg font-pixel font-bold text-white mt-1 leading-snug">
                       {assignedItem.nombre}
@@ -896,7 +938,7 @@ export const ParticipantMobileView: React.FC<ParticipantMobileViewProps> = ({
               </div>
 
               {/* Ticket State */}
-              {!validUserName ? (
+              {!validUserName || isEditingName ? (
                 <div className="p-5 bg-[#1c1510] border-4 border-amber-400 shadow-[6px_6px_0px_#000] text-center space-y-4 my-2 crt-scanlines">
                   <div className="w-16 h-16 mx-auto bg-black border-2 border-amber-400 flex items-center justify-center text-3xl shadow-[0_0_20px_rgba(245,158,11,0.4)] animate-pulse">
                     🎟️
@@ -907,27 +949,48 @@ export const ParticipantMobileView: React.FC<ParticipantMobileViewProps> = ({
                     </span>
                     <h2 className="text-base font-arcade text-white">¿A NOMBRE DE QUIÉN EL BOLETO?</h2>
                     <p className="text-xs text-slate-300 font-retro mt-1 max-w-xs mx-auto">
-                      Ingresa tu nombre para emitir tu número de boleto en la ruleta del organizador.
+                      Ingresa tu nombre y tu teléfono o correo para emitir tu número de boleto único en la ruleta.
                     </p>
                   </div>
 
-                  <form onSubmit={handleSaveName} className="space-y-3 pt-1">
-                    <input
-                      type="text"
-                      value={inputName}
-                      onChange={(e) => setInputName(e.target.value)}
-                      placeholder="ESCRIBE TU NOMBRE..."
-                      autoFocus
-                      maxLength={30}
-                      className="w-full px-3 py-2.5 text-center text-xs bg-black border-2 border-amber-400 text-amber-300 font-pixel uppercase focus:outline-none focus:border-yellow-300 shadow-inner"
-                    />
+                  <form onSubmit={handleSaveName} className="space-y-3 pt-1 text-left">
+                    <div>
+                      <label className="block text-[10px] font-pixel text-slate-400 mb-1">
+                        NOMBRE O APODO:
+                      </label>
+                      <input
+                        type="text"
+                        value={inputName}
+                        onChange={(e) => setInputName(e.target.value)}
+                        placeholder="ESCRIBE TU NOMBRE..."
+                        autoFocus
+                        maxLength={30}
+                        className="w-full px-3 py-2.5 text-xs bg-black border-2 border-amber-400 text-amber-300 font-pixel uppercase focus:outline-none focus:border-yellow-300 shadow-inner"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-pixel text-slate-400 mb-1">
+                        TELÉFONO O CORREO (TICKET ÚNICO):
+                      </label>
+                      <input
+                        type="text"
+                        value={inputContact}
+                        onChange={(e) => setInputContact(e.target.value)}
+                        placeholder="+58 412... O CORREO..."
+                        maxLength={50}
+                        className="w-full px-3 py-2.5 text-xs bg-black border-2 border-amber-400 text-amber-300 font-pixel focus:outline-none focus:border-yellow-300 shadow-inner"
+                      />
+                      <p className="text-[10px] text-slate-400 font-retro mt-1">
+                        * Evita que se emitan múltiples boletos para la misma persona en este sorteo.
+                      </p>
+                    </div>
                     <button
                       type="submit"
-                      disabled={!inputName.trim()}
+                      disabled={!inputName.trim() || !inputContact.trim()}
                       className="pixel-btn-amber w-full py-3 text-xs font-arcade font-bold flex items-center justify-center gap-2 tracking-wider shadow-[3px_3px_0px_#000] disabled:opacity-50"
                     >
+                      <Ticket className="w-4 h-4" />
                       <span>CONTINUAR AL BOLETO</span>
-                      <Sparkles className="w-4 h-4" />
                     </button>
                   </form>
                 </div>

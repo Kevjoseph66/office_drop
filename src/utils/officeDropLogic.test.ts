@@ -175,3 +175,52 @@ test('calculatePotluckStats calculates purchased count and percentage correctly'
   assert.equal(stats.purchased, 1);
   assert.equal(stats.purchasedPercent, 50); // 1 out of 2 assigned
 });
+
+test('assignRandomPotluckItem prevents duplicate claiming by phone or email anti-cheat', () => {
+  const items: PotluckItem[] = [
+    {
+      id: '1',
+      nombre: 'Jugo de Naranja',
+      cantidadEspecifica: '2L',
+      categoria: 'Bebidas',
+      costoEstimado: '$4',
+      assignedTo: 'Carlos M.',
+      assignedPhoneOrEmail: '+584121234567',
+    },
+    {
+      id: '2',
+      nombre: 'Galletas',
+      cantidadEspecifica: '2 paquetes',
+      categoria: 'Snacks',
+      costoEstimado: '$3',
+    },
+  ];
+
+  // Attempting to claim under a different name but same phone number:
+  const result = assignRandomPotluckItem(items, 'Carlos Fake', undefined, '+584121234567');
+  assert.equal(result.isExisting, true);
+  assert.equal(result.assignedItem?.id, '1');
+  assert.equal(result.assignedItem?.nombre, 'Jugo de Naranja');
+  // Should NOT take the unassigned cookies
+  const stillAvailable = result.updatedItems.filter((i) => !i.assignedTo);
+  assert.equal(stillAvailable.length, 1);
+  assert.equal(stillAvailable[0].id, '2');
+});
+
+test('registerRaffleTicket prevents duplicate ticket generation by phone or email anti-cheat', () => {
+  const tickets: RaffleTicket[] = [
+    {
+      ticketNumber: 1,
+      userName: 'Elena Gomez',
+      phoneOrEmail: 'elena@empresa.com',
+      joinedAt: '2026-10-26T12:00:00Z',
+    },
+  ];
+
+  // Attempting to generate a second ticket under an alias with the same email:
+  const result = registerRaffleTicket(tickets, 'Elena G. (Alias)', undefined, 'elena@empresa.com');
+  assert.equal(result.isExisting, true);
+  assert.equal(result.ticket?.ticketNumber, 1);
+  assert.equal(result.updatedTickets.length, 1);
+});
+

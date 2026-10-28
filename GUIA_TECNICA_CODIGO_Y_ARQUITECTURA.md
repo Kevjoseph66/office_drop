@@ -83,21 +83,27 @@ Representa cada plato o alimento que alguien llevará al evento:
 
 ```typescript
 export interface PotluckItem {
-  id: string;                    // Identificador único (ej: 'item-1')
-  nombre: string;                // Nombre del producto (ej: 'Café de Especialidad')
-  cantidadEspecifica: string;    // Cantidad exacta a comprar (ej: '1 bolsa de 500g')
-  categoria: string;             // 'Bebidas' | 'Salado' | 'Postre' | 'Snacks' | 'Desechables'
-  costoEstimado: string;         // Rango monetario (ej: '$5 - $8')
-  assignedTo?: string | null;    // Nombre del participante que lo tomó
-  assignedAt?: string | null;    // Timestamp ISO de la asignación
-  assignedDeviceId?: string | null; // ID único del dispositivo móvil (anti-trampa)
+  id: string;                         // Identificador único (ej: 'item-1')
+  nombre: string;                     // Nombre del producto o combo (ej: 'Combo Tacos y Salsa')
+  cantidadEspecifica: string;         // Cantidad exacta a comprar (ej: '2 paquetes')
+  categoria: string;                  // 'Bebidas' | 'Salado' | 'Postre' | 'Snacks' | 'Desechables'
+  costoEstimado: string;              // Rango monetario (ej: '$5 - $8')
+  assignedTo?: string | null;         // Nombre del participante que lo tomó
+  assignedPhoneOrEmail?: string | null; // Teléfono o correo para validación única anti-trampa
+  assignedAt?: string | null;         // Timestamp ISO de la asignación
+  assignedDeviceId?: string | null;   // ID único del dispositivo móvil (anti-trampa)
+  subItems?: PotluckSubItem[];        // Productos agrupados en un solo ticket (soporte combo)
+  purchased?: boolean;                // Booleano indicando si ya compró los productos
+  purchasedAt?: string | null;        // Timestamp ISO de la confirmación de compra
 }
 ```
 
 #### Conceptos clave para principiantes:
 - `string`: Indica que el valor debe ser una cadena de texto.
+- `boolean`: Valor de verdad verdadero/falso (`true` o `false`).
 - El signo de interrogación `?` (como en `assignedTo?`): Significa que ese campo es **opcional**. Cuando el evento recién se crea, nadie ha tomado el plato todavía, por lo que el campo puede no existir o ser `null`.
 - `string | null`: Se llama **Union Type**. Significa que el valor puede ser texto (ej: `"Carlos"`) o `null` (vacío).
+- `subItems?: PotluckSubItem[]`: Permite que un solo ticket contenga múltiples productos y cantidades (por ejemplo, cuando son pocas personas y muchos productos).
 
 ---
 
@@ -232,16 +238,18 @@ export async function assignPotluckItemWithTransaction(
     const eventData = docSnap.data() as OfficeEvent;
     const items: PotluckItem[] = eventData.items || [];
 
-    // PASO 2: ANTI-TRAMPA
-    // Comprobamos si el nombre O el dispositivo ya tienen un ítem asignado
+    // PASO 2: ANTI-TRAMPA Y VERIFICACIÓN DE IDENTIDAD ÚNICA
+    // Comprobamos si el nombre, el teléfono/correo O el dispositivo ya tienen un ítem asignado
+    const cleanContact = phoneOrEmail ? phoneOrEmail.trim().toLowerCase() : '';
     const existing = items.find(
       (it) =>
         (it.assignedTo && it.assignedTo.toLowerCase() === cleanName.toLowerCase()) ||
+        (cleanContact && it.assignedPhoneOrEmail && it.assignedPhoneOrEmail.toLowerCase() === cleanContact) ||
         (deviceId && it.assignedDeviceId && it.assignedDeviceId === deviceId)
     );
 
     if (existing) {
-      // Si ya tenía plato, le devolvemos el suyo sin permitirle girar otra vez
+      // Si ya tenía plato, le devolvemos su ticket original sin permitirle duplicar
       return { item: existing, isExisting: true };
     }
 
@@ -256,12 +264,13 @@ export async function assignPotluckItemWithTransaction(
     const chosenItem = availableItems[randomIndex];
     const now = new Date().toISOString();
 
-    // PASO 5: Marcamos el ítem como tomado
+    // PASO 5: Marcamos el ítem como tomado con nombre, contacto y dispositivo
     const updatedItems = items.map((it) => {
       if (it.id === chosenItem.id) {
         return {
           ...it,
           assignedTo: cleanName,
+          assignedPhoneOrEmail: phoneOrEmail?.trim() || null,
           assignedDeviceId: deviceId || null,
           assignedAt: now,
         };
@@ -273,7 +282,13 @@ export async function assignPotluckItemWithTransaction(
     transaction.update(docRef, { items: cleanForFirestore(updatedItems) });
 
     return {
-      item: { ...chosenItem, assignedTo: cleanName, assignedDeviceId: deviceId || null, assignedAt: now },
+      item: {
+        ...chosenItem,
+        assignedTo: cleanName,
+        assignedPhoneOrEmail: phoneOrEmail?.trim() || null,
+        assignedDeviceId: deviceId || null,
+        assignedAt: now,
+      },
       isExisting: false,
     };
   });

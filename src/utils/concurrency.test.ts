@@ -64,12 +64,14 @@ test('Concurrency: 20 participants claim items simultaneously with ZERO duplicat
 
   const mockDb = new MockFirestoreDoc<{ items: PotluckItem[] }>({ items: initialItems });
 
-  // 20 participants click "ABRIR REGALO" at the exact same millisecond
+  type ClaimResult = { item: PotluckItem | null; error: string | null };
+
+  // 20 participants click "OBTENER TICKET" at the exact same millisecond
   const participants = Array.from({ length: 20 }, (_, i) => `Usuario_${i + 1}`);
 
   const results = await Promise.all(
     participants.map((userName) =>
-      mockDb.runTransaction(async (snap) => {
+      mockDb.runTransaction<ClaimResult>(async (snap) => {
         const items = snap.data.items;
         const available = items.filter((it) => !it.assignedTo);
         if (available.length === 0) {
@@ -119,11 +121,12 @@ test('Concurrency: 30 participants compete for 10 items (over-subscription handl
 
   const mockDb = new MockFirestoreDoc<{ items: PotluckItem[] }>({ items: initialItems });
 
+  type ClaimResult = { item: PotluckItem | null; error: string | null };
   const participants = Array.from({ length: 30 }, (_, i) => `Persona_${i + 1}`);
 
   const results = await Promise.all(
     participants.map((userName) =>
-      mockDb.runTransaction(async (snap) => {
+      mockDb.runTransaction<ClaimResult>(async (snap) => {
         const items = snap.data.items;
         const available = items.filter((it) => !it.assignedTo);
         if (available.length === 0) {

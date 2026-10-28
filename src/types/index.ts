@@ -14,6 +14,7 @@ export interface PotluckItem {
   categoria: string;
   costoEstimado: string;
   assignedTo?: string | null;
+  assignedPhoneOrEmail?: string | null;
   assignedAt?: string | null;
   assignedDeviceId?: string | null;
   subItems?: PotluckSubItem[];
@@ -24,6 +25,7 @@ export interface PotluckItem {
 export interface RaffleTicket {
   ticketNumber: number;
   userName: string;
+  phoneOrEmail?: string | null;
   joinedAt: string;
   deviceId?: string | null;
 }

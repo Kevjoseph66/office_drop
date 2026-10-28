@@ -7,17 +7,20 @@ import { PotluckItem, RaffleTicket } from '../types';
 export function assignRandomPotluckItem(
   items: PotluckItem[],
   userName: string,
-  deviceId?: string
+  deviceId?: string,
+  phoneOrEmail?: string
 ): { updatedItems: PotluckItem[]; assignedItem: PotluckItem | null; isExisting: boolean; error?: string } {
   const cleanName = userName.trim();
+  const cleanContact = phoneOrEmail ? phoneOrEmail.trim().toLowerCase() : null;
   if (!cleanName) {
     return { updatedItems: items, assignedItem: null, isExisting: false, error: 'El nombre es obligatorio.' };
   }
 
-  // Check if user already has an assigned item (by name or by deviceId)
+  // Check if user already has an assigned item (by name, phone/email, or by deviceId)
   const existing = items.find(
     (item) =>
       (item.assignedTo && item.assignedTo.trim().toLowerCase() === cleanName.toLowerCase()) ||
+      (Boolean(cleanContact) && Boolean(item.assignedPhoneOrEmail) && item.assignedPhoneOrEmail?.trim().toLowerCase() === cleanContact) ||
       (Boolean(deviceId) && Boolean(item.assignedDeviceId) && item.assignedDeviceId === deviceId)
   );
   if (existing) {
@@ -45,6 +48,7 @@ export function assignRandomPotluckItem(
       return {
         ...item,
         assignedTo: cleanName,
+        assignedPhoneOrEmail: phoneOrEmail?.trim() || null,
         assignedDeviceId: deviceId || null,
         assignedAt: now,
       };
@@ -65,6 +69,7 @@ export function unassignPotluckItem(items: PotluckItem[], itemId: string): Potlu
       return {
         ...item,
         assignedTo: null,
+        assignedPhoneOrEmail: null,
         assignedAt: null,
         assignedDeviceId: null,
       };
@@ -80,9 +85,11 @@ export function unassignPotluckItem(items: PotluckItem[], itemId: string): Potlu
 export function registerRaffleTicket(
   tickets: RaffleTicket[],
   userName: string,
-  deviceId?: string
+  deviceId?: string,
+  phoneOrEmail?: string
 ): { updatedTickets: RaffleTicket[]; ticket: RaffleTicket | null; isExisting: boolean; error?: string } {
   const cleanName = userName.trim();
+  const cleanContact = phoneOrEmail ? phoneOrEmail.trim().toLowerCase() : null;
   if (!cleanName) {
     return { updatedTickets: tickets, ticket: null, isExisting: false, error: 'El nombre es obligatorio.' };
   }
@@ -90,6 +97,7 @@ export function registerRaffleTicket(
   const existing = tickets.find(
     (t) =>
       t.userName.trim().toLowerCase() === cleanName.toLowerCase() ||
+      (Boolean(cleanContact) && Boolean(t.phoneOrEmail) && t.phoneOrEmail?.trim().toLowerCase() === cleanContact) ||
       (Boolean(deviceId) && Boolean(t.deviceId) && t.deviceId === deviceId)
   );
   if (existing) {
@@ -100,6 +108,7 @@ export function registerRaffleTicket(
   const newTicket: RaffleTicket = {
     ticketNumber: nextNumber,
     userName: cleanName,
+    phoneOrEmail: phoneOrEmail?.trim() || null,
     deviceId: deviceId || null,
     joinedAt: new Date().toISOString(),
   };

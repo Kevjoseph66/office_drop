@@ -323,7 +323,8 @@ export const OrganizerView: React.FC<OrganizerViewProps> = ({
     const matchesQuery =
       it.nombre.toLowerCase().includes(searchQuery.toLowerCase()) ||
       it.categoria.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (it.assignedTo && it.assignedTo.toLowerCase().includes(searchQuery.toLowerCase()));
+      (it.assignedTo && it.assignedTo.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (it.assignedPhoneOrEmail && it.assignedPhoneOrEmail.toLowerCase().includes(searchQuery.toLowerCase()));
 
     if (!matchesQuery) return false;
     if (filterMode === 'assigned') return Boolean(it.assignedTo);
@@ -504,7 +505,7 @@ export const OrganizerView: React.FC<OrganizerViewProps> = ({
                 AI QUEST & LOOT GENERATOR
               </div>
               <h2 className="text-sm sm:text-base font-arcade text-purple-200">
-                CREADOR DE DINÁMICA CON GEMINI 3.8
+                CREADOR DE DINÁMICA DE EQUIPO
               </h2>
             </div>
             <button
@@ -1141,9 +1142,14 @@ export const OrganizerView: React.FC<OrganizerViewProps> = ({
                           <>
                             {item.assignedTo ? (
                               <div className="flex items-center gap-1.5 flex-wrap">
-                                <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-pixel bg-emerald-950 text-emerald-300 border border-emerald-400">
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-pixel bg-emerald-950 text-emerald-300 border border-emerald-400">
                                   <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
                                   <span>{item.assignedTo}</span>
+                                  {item.assignedPhoneOrEmail && (
+                                    <span className="text-[10px] text-cyan-300 font-retro pl-1 border-l border-emerald-600/70">
+                                      ({item.assignedPhoneOrEmail})
+                                    </span>
+                                  )}
                                 </span>
 
                                 {/* Purchase status toggle button */}
